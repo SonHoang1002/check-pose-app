@@ -4,6 +4,13 @@
 > file này là hiểu được sản phẩm làm gì, thuật toán hoạt động ra sao, bản iOS đã có
 > những gì, còn thiếu gì, và bước tiếp theo là gì.
 >
+> **Cập nhật 21/11/2026 — trạng thái hiện tại:**
+> - Package và applicationId đã đổi thành `com.hts.checkposeapp` (lệnh `adb` cũng đổi theo).
+> - **Đã bỏ chế độ quay video.** Màn chụp chỉ còn chụp liên tiếp 8 tấm ảnh thật; bấm lại khi đang chụp để dừng sớm. Camera chỉ bật sau khi phân tích xong ảnh mẫu.
+> - Thanh chỉnh độ sáng (bù sáng EV) trên màn chụp. Nút ⚙ Cài đặt (kiểu iPhone) gom: chế độ bấm, tỉ lệ khung, lưới, khung xương, số đo gỡ lỗi.
+> - Màn kết quả có mục phân tích ánh sáng từng ảnh (chỉ hiển thị, không tính vào điểm).
+> - Các đoạn nói về "quay video" phía dưới là lịch sử thiết kế; luồng hiện tại theo mục này.
+>
 > **Trạng thái:** tổng hợp ngày 2026-09-02. Đây là tài liệu *dẫn đường*, không thay thế
 > các tài liệu gốc trong `legacy-ios/Documents/` — mọi con số chi tiết vẫn tra ở đó.
 >
@@ -40,7 +47,7 @@ thị trường chứng minh là thất bại. Hướng của PoseCoach: **AI l�
 
 | | Tên nội bộ | Kịch bản |
 |---|---|---|
-| **TN1** *(quan trọng nhất)* | Record & Pick | Bấm nút → app **quay video 15-30s** thay vì chụp 1 tấm. Người mẫu cứ cử động tự nhiên. Quay xong AI chấm mọi khung hình và chọn ra **3-5 khung đẹp nhất**. Video gốc bị xoá. |
+| **TN1** *(quan trọng nhất)* | Burst & Pick | Bấm nút → app **chụp liên tiếp 8 tấm ảnh thật** (bấm lại để dừng sớm). Người mẫu giữ dáng tự nhiên. Chụp xong AI chấm từng tấm và giữ **5 tấm đẹp nhất**. Ảnh gốc của loạt bị xoá. *(Bản đầu dùng quay video 15-30s; đã bỏ 21/11/2026.)* |
 | **TN2** | Director | User chọn/import **ảnh mẫu** → app phân tích trước → hiện **chỉ dẫn realtime** cho người cầm máy → khi "đủ gần" thì chuyển sang quay như TN1. |
 
 Giá trị bán cho user: *"bạn không bao giờ phải biết tạo dáng nữa."*

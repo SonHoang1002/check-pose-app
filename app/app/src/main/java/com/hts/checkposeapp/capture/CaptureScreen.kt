@@ -60,11 +60,9 @@ import com.hts.checkposeapp.ui.CriteriaChecklist
 import com.hts.checkposeapp.ui.CriteriaProgress
 import com.hts.checkposeapp.ui.CuePill
 import com.hts.checkposeapp.ui.TemplateCard
-import com.hts.checkposeapp.media.VideoFrameSource
 import com.hts.checkposeapp.pose.Lm
 import com.hts.checkposeapp.pose.PoseDetector
 import com.hts.checkposeapp.pose.StillPoseAnalyzer
-import com.hts.checkposeapp.pose.VideoPoseAnalyzer
 import com.hts.checkposeapp.ui.theme.Ds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -89,39 +87,6 @@ private const val MIN_VIS = 0.5f
 private const val FACE_NHIP_MS = 300L
 
 /**
- * Khoảng cách giữa hai khung đem đi chấm điểm.
- *
- * ⚠️ VÌ SAO 250ms CHỨ KHÔNG PHẢI 100ms: bộ giữ khung bắt buộc hai ảnh được giữ
- * phải **cách nhau ít nhất 900ms** (`BestShotBuffer.minGapMs`). Lấy mẫu mỗi 100ms
- * nghĩa là cứ 9 khung thì tối đa 1 khung có cơ hội được giữ — 8 khung còn lại tốn
- * đúng chừng ấy công giải mã, nhận diện và chấm điểm để rồi chắc chắn bị bỏ.
- *
- * Đây là đánh đổi thật, không phải bữa trưa miễn phí: lấy thưa hơn thì có thể bỏ
- * lỡ đúng khoảnh khắc đẹp nhất trong mỗi khoảng 900ms. Nhưng 250ms vẫn cho 3-4
- * lựa chọn trong mỗi khoảng đó, trong khi thời gian xử lý giảm 2,5 lần.
- */
-
-/** Bước nhảy khi chấm điểm video sau khi quay. 100ms = 10 khung/giây. */
-/**
- * Bước nhảy khi quét video để chấm điểm.
- *
- * ⚠️ Đi cùng với `OPTION_CLOSEST_SYNC` trong `VideoFrameSource`: ở chế độ đó chỉ
- * lấy được **khung khoá**, mà video điện thoại thường 1-2 giây mới có một cái.
- * Quét dày hơn chỉ tổ lấy lại cùng một khung nhiều lần.
- *
- * 500ms là mức an toàn: video nào có khung khoá dày hơn thì vẫn tận dụng được,
- * video thưa thì cũng không gọi thừa quá nhiều.
- */
-private const val SCORE_STEP_MS = 500L
-
-/**
- * Chụp liên tục: bao nhiêu tấm, cách nhau bao lâu.
- *
- * 8 tấm trong ~4 giây. Chọn con số này vì bộ giữ khung chỉ loại một tấm khi nó
- * **vừa gần về thời gian VỪA giống về dáng** — nên 500ms là đủ thưa để tám tấm
- * đều có cơ hội, mà vẫn đủ dày để bắt được khoảnh khắc.
- */
-/**
  * Số giây đếm ngược trước khi tự bấm quay.
  *
  * 5 giây: đủ để buông tay khỏi màn hình, vào dáng và ổn định. Ngắn hơn thì vội,
@@ -145,35 +110,35 @@ private const val AUTO_STABLE_MS = 800L
  */
 private const val AUTO_CANCEL_GRACE_MS = 500L
 
+/**
+ * Chụp liên tiếp: bao nhiêu tấm, cách nhau bao lâu.
+ *
+ * 8 tấm trong ~4 giây. Chọn con số này vì bộ giữ khung chỉ loại một tấm khi nó
+ * **vừa gần về thời gian VỪA giống về dáng** — nên 500ms là đủ thưa để tám tấm
+ * đều có cơ hội, mà vẫn đủ dày để bắt được khoảnh khắc.
+ */
 private const val BURST_COUNT = 8
 private const val BURST_INTERVAL_MS = 500L
 
-/** Cạnh ngắn khi CHẤM ĐIỂM — nhỏ cho nhanh, ảnh này không dùng làm ảnh cuối. */
-private const val SCORING_SHORT_SIDE = 480
-
-/** Cạnh ngắn khi CẮT ẢNH CUỐI — chỉ làm với 5 tấm được chọn nên chậm cũng không sao. */
+/** Cạnh ngắn khi giải mã ảnh chụp để chấm và để giữ. 1440 đủ nét mà không tốn bộ nhớ. */
 private const val FINAL_SHORT_SIDE = 1440
 
 /**
- * MÀN CHỤP THẬT — camera thật, quay video thật.
+ * MÀN CHỤP THẬT — camera thật, chụp liên tiếp.
  *
  * Đây là màn chụp DUY NHẤT của app. Luồng:
  *
  * ```
  *   camera + nhận diện realtime
- *      → bấm Quay  → CameraX ghi ra file .mp4 (Full HD)
- *      → bấm Dừng  → chấm điểm TỪNG KHUNG của video vừa quay (chế độ VIDEO)
- *                  → giữ 5 khung khớp ảnh mẫu nhất
- *                  → cắt lại 5 khung đó ở độ phân giải cao
- *                  → XOÁ video thô
+ *      → bấm Chụp → chụp liên tiếp BURST_COUNT tấm, mỗi tấm là ảnh chụp thật (full độ phân giải)
+ *                 → bấm lần nữa khi đang chụp: DỪNG SỚM, giữ các tấm đã chụp
+ *                 → chấm điểm từng tấm, giữ 5 tấm khớp ảnh mẫu nhất
+ *                 → XOÁ ảnh gốc của loạt
  *      → màn xem lại
  * ```
  *
- * ⚠️ Vì sao quay video rồi mới chấm, thay vì chấm ngay lúc quay: khung hình đưa
- * vào nhận diện chỉ ~480px (cố ý, cho nhanh). Lấy chính nó làm ảnh cuối thì ảnh
- * xấu. Quay Full HD rồi cắt ra mới đúng thiết kế sản phẩm — và đây cũng là cách
- * duy nhất trả lời được câu hỏi lớn nhất dự án: *"khung cắt từ video có đẹp bằng
- * ảnh chụp thường không"*.
+ * Chế độ quay video đã bỏ: mỗi tấm chụp thật cho chất lượng cao hơn khung cắt từ
+ * video, và không sinh hàng chục MB rác mỗi lần bấm.
  */
 @Composable
 fun CaptureScreen(
@@ -408,25 +373,23 @@ fun CaptureScreen(
         // ⚠️ Đọc `vm.state.value` chứ KHÔNG dùng `state` bắt được lúc dựng giao diện.
         // Đồng hồ tự động gọi hàm này vài giây sau, lúc đó bản chụp cũ đã cũ.
         val now = vm.state.value
-        when {
-            now.burstMode -> {
-                val dir = File(context.getExternalFilesDir(null), "burst")
-                // Xoa loat cu truoc khi chup loat moi, neu khong anh cua hai lan
-                // chup se lan vao nhau.
-                runCatching { dir.deleteRecursively() }
-                c.captureBurst(
-                    dir = dir,
-                    count = BURST_COUNT,
-                    intervalMs = BURST_INTERVAL_MS,
-                    onProgress = { n -> vm.onBurstProgress(n) },
-                    onDone = { files -> scope.launch { processBurst(context, files, vm) } },
-                )
-            }
-            now.recording -> c.stopRecording()
-            else -> startRecording(
-                c, context.getExternalFilesDir(null), vm, scope,
-            ) { video -> scope.launch { processRecording(context, video, vm) } }
+        // Đang chụp dở thì bấm lần nữa là DỪNG SỚM: giữ những tấm đã chụp, không đợi đủ
+        // BURST_COUNT. Không chụp thêm được gì nữa thì cũng không cần chờ.
+        if (now.burstTaken > 0) {
+            c.stopBurst()
+            return@shoot
         }
+        val dir = File(context.getExternalFilesDir(null), "burst")
+        // Xoa loat cu truoc khi chup loat moi, neu khong anh cua hai lan
+        // chup se lan vao nhau.
+        runCatching { dir.deleteRecursively() }
+        c.captureBurst(
+            dir = dir,
+            count = BURST_COUNT,
+            intervalMs = BURST_INTERVAL_MS,
+            onProgress = { n -> vm.onBurstProgress(n) },
+            onDone = { files -> scope.launch { processBurst(context, files, vm) } },
+        )
     }
 
     // --- TỰ ĐỘNG: đủ giống thì đếm ngược rồi bấm quay hộ ---
@@ -451,8 +414,8 @@ fun CaptureScreen(
             val s = vm.state.value
             val now = System.currentTimeMillis()
 
-            // Đang quay/chụp/xử lý thì không đếm — nếu không nó bấm chồng lên nhau.
-            val busy = s.recording || s.burstTaken > 0 || s.processing
+            // Đang chụp/xử lý thì không đếm — nếu không nó bấm chồng lên nhau.
+            val busy = s.burstTaken > 0 || s.processing
             // Chỉ bắt đầu đếm sau khi toàn bộ quy trình đã hoàn tất. Mục
             // không hội tụ sẽ được engine đánh dấu bỏ qua trước khi cờ này bật.
             // `readyToPose` chỉ có nghĩa là đã tới giai đoạn hướng dẫn mẫu.
@@ -485,21 +448,6 @@ fun CaptureScreen(
         }
     }
 
-    // --- Đồng hồ quay + tự dừng ở 30 giây ---
-    LaunchedEffect(state.recording) {
-        if (!state.recording) return@LaunchedEffect
-        val startedAt = SystemClock.elapsedRealtime()
-        while (true) {
-            val elapsed = SystemClock.elapsedRealtime() - startedAt
-            vm.onRecordingTick(elapsed)
-            if (elapsed >= CaptureUiState.MAX_RECORD_MS) {
-                controller?.stopRecording()
-                break
-            }
-            delay(100)
-        }
-    }
-
     // --- Chốt xong thì sang màn xem lại ---
     LaunchedEffect(state.finishedSession) {
         state.finishedSession?.let(onFinished)
@@ -527,16 +475,9 @@ fun CaptureScreen(
             CaptureSettingsSheet(
                 autoMode = state.autoMode,
                 onAutoMode = { vm.onAutoModeChanged(it) },
-                burst = state.burstMode,
-                onBurst = { burst ->
-                    controller?.setMode(
-                        if (burst) CaptureController.Mode.BURST else CaptureController.Mode.VIDEO
-                    )
-                    vm.onModeChanged(burst)
-                },
                 tiLeNhan = tiLeKhung.nhan,
                 onTiLeTiep = { tiLeKhung = tiLeKhung.tiep() },
-                khoaKhiDangQuay = state.recording || state.burstTaken > 0,
+                khoaKhiDangChup = state.burstTaken > 0,
                 showGrid = hienLuoi,
                 onGrid = { hienLuoi = it },
                 showSkeleton = showSkeleton,
@@ -551,11 +492,10 @@ fun CaptureScreen(
                 val tiLe = tiLeKhung.tiLe(
                     if (maxHeight.value > 0f) (maxWidth.value / maxHeight.value).toDouble() else 0.75
                 )
-                // Một tỉ lệ cho bốn chỗ: phép đo, khung quay video, góc mở dọc, ảnh ra.
+                // Một tỉ lệ cho ba chỗ: phép đo, khung cắt ảnh ra, góc mở dọc.
                 // Góc mở đổi cả khi camera sẵn sàng và khi zoom.
                 LaunchedEffect(tiLe, controller, state.cameraReady, state.zoomRatio) {
                     vm.onTiLeKhungChanged(tiLe)
-                    controller?.setTiLeKhung(tiLe)
                     vm.onVerticalFovChanged(controller?.verticalFovDeg(tiLe))
                 }
                 Box(
@@ -740,142 +680,14 @@ fun CaptureScreen(
 }
 
 /* ------------------------------------------------------------------ */
-/* Quay và chấm điểm                                                    */
+/* Chấm điểm loạt ảnh sau khi chụp                                      */
 /* ------------------------------------------------------------------ */
-
-private fun startRecording(
-    controller: CaptureController,
-    filesDir: File?,
-    vm: CaptureViewModel,
-    scope: CoroutineScope,
-    onVideoReady: (File) -> Unit,
-) {
-    val dir = File(filesDir, "recordings").apply { mkdirs() }
-    val target = File(dir, "rec-${System.currentTimeMillis()}.mp4")
-
-    controller.startRecording(target) { done ->
-        vm.onRecordingStopped()
-        if (done == null) {
-            vm.onProcessingFailed("Quay video không thành công. Thử lại được.")
-        } else {
-            scope.launch { onVideoReady(done) }
-        }
-    }
-    vm.onRecordingStarted()
-}
-
-/**
- * Chấm điểm từng khung của video vừa quay, giữ 5 khung khớp ảnh mẫu nhất.
- *
- * Chạy hoàn toàn ở luồng nền — giải mã video và nhận diện đều nặng.
- */
-private suspend fun processRecording(
-    context: android.content.Context,
-    video: File,
-    vm: CaptureViewModel,
-) {
-    val profile = vm.templateProfile
-    if (profile == null) {
-        vm.onProcessingFailed("Chưa phân tích được ảnh mẫu nên không chấm điểm được.")
-        runCatching { video.delete() }
-        return
-    }
-
-    vm.onProcessing(0f, "Đang mở đoạn vừa quay…")
-
-    withContext(Dispatchers.Default) {
-        var scoringSource: VideoFrameSource? = null
-        var finalSource: VideoFrameSource? = null
-        var analyzer: VideoPoseAnalyzer? = null
-        var faceAnalyzer: FaceAnalyzer? = null
-        try {
-            val small = VideoFrameSource(video, targetShortSide = SCORING_SHORT_SIDE)
-            scoringSource = small
-            if (!small.isValid || small.durationMs <= 0) {
-                vm.onProcessingFailed("Không đọc được đoạn vừa quay.")
-                return@withContext
-            }
-
-            val an = VideoPoseAnalyzer(context)
-            analyzer = an
-            if (!an.isReady) {
-                vm.onProcessingFailed("Không nạp được model để chấm điểm.")
-                return@withContext
-            }
-
-            val store = ShotStore.createSession(context)
-            val fa = FaceAnalyzer()
-            faceAnalyzer = fa
-            val session = ShotSession(
-                store, profile, MIN_VIS,
-                faceAnalyzer = fa,
-                tiLeKhung = vm.tiLeKhung,
-            )
-
-            var pos = 0L
-            var seen = 0
-            while (pos <= small.durationMs) {
-                val bmp = small.frameAt(pos)
-                if (bmp != null) {
-                    val pose = an.analyze(bmp, pos)
-                    if (pose != null && !pose.isEmpty) {
-                        session.offer(bmp, pose, pos)
-                        seen++
-                    }
-                }
-                pos += SCORE_STEP_MS
-                vm.onProcessing(
-                    progress = pos.toFloat() / small.durationMs.toFloat(),
-                    note = "Đang chấm điểm… giây %.0f/%.0f".format(
-                        pos / 1000.0, small.durationMs / 1000.0,
-                    ),
-                )
-            }
-
-            if (seen == 0) {
-                // Không "thất bại im lặng" (luật số 7): nói rõ chuyện gì đã xảy ra.
-                vm.onProcessingFailed(
-                    "Trong cả đoạn vừa quay, app không nhận ra người ở khung hình nào. " +
-                        "Thử quay lại với mẫu đứng trọn trong khung và thấy rõ phần đầu."
-                )
-                store.deleteSession()
-                return@withContext
-            }
-
-            vm.onProcessing(1f, "Đang cắt ảnh chất lượng cao…")
-
-            // Cắt lại ở độ phân giải cao NGAY TRONG bước chốt, không phải sau đó.
-            // Nhờ vậy mắt-nhắm và độ nét được chấm trên đúng tấm ảnh sẽ giao cho
-            // người dùng, thay vì trên bản thu nhỏ ~480px dùng để đo hình học.
-            val big = VideoFrameSource(video, targetShortSide = FINAL_SHORT_SIDE)
-            finalSource = big
-            val kept = session.finish(
-                keepCount = 5,
-                highRes = if (big.isValid) ({ t -> big.frameAt(t) }) else null,
-            )
-
-            // Xoá video thô — đây là rác nặng nhất của app (30 giây Full HD ~60-100 MB).
-            runCatching { video.delete() }
-
-            vm.onFinished(store.sessionDir)
-        } catch (e: Throwable) {
-            vm.onProcessingFailed("Chấm điểm không xong: ${e.message}")
-            runCatching { video.delete() }
-        } finally {
-            scoringSource?.close()
-            finalSource?.close()
-            analyzer?.close()
-            faceAnalyzer?.close()
-        }
-    }
-}
 
 /**
  * CHẤM ĐIỂM MỘT LOẠT ẢNH CHỤP LIÊN TỤC.
  *
- * Khác đường video đúng ở chỗ lấy ảnh từ đâu: ở đây mỗi tấm đã là **ảnh chụp
- * thật**, không phải khung cắt ra. Mọi bước phía sau — đo, chấm, giữ 5 tấm, xoá
- * phần còn lại — dùng chung đúng code với đường video.
+ * Mỗi tấm đã là **ảnh chụp thật**, không phải khung cắt ra. Mọi bước phía sau —
+ * đo, chấm, giữ 5 tấm, xoá phần còn lại — chạy trên đúng các tấm này.
  */
 private suspend fun processBurst(
     context: android.content.Context,
@@ -1020,7 +832,7 @@ private fun TemplateAnalyzingScreen(state: CaptureUiState) {
 }
 
 /**
- * CONG TAC HAI CHE DO: quay video / chup lien tuc.
+ * CONG TAC CHE DO CHUP: bam tay / tu dem 5s.
  *
  * Hai duong deu bat khoanh khac, khac nhau o cho danh doi:
  *  - **Video**: bat duoc moi khoanh khac, nhung anh cat ra tu video
@@ -1466,25 +1278,15 @@ private fun CameraControls(
     onOpenLibrary: () -> Unit,
     onFlipCamera: () -> Unit,
 ) {
-    // Đang quay hoặc đang chụp liên tiếp thì KHOÁ hai nút phụ: rời màn giữa chừng
-    // là mất đoạn đang quay, còn xoay camera là phải gắn lại toàn bộ camera.
-    val dangBan = state.recording || state.burstTaken > 0
+    // Đang chụp dở thì KHOÁ hai nút phụ: rời màn giữa chừng là mất loạt đang chụp,
+    // còn xoay camera là phải gắn lại toàn bộ camera.
+    val dangBan = state.burstTaken > 0
 
     Column(
         Modifier.fillMaxWidth().padding(bottom = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (state.recording) {
-            Text(
-                "● %.1fs / %.0fs".format(
-                    state.recordedMs / 1000.0,
-                    CaptureUiState.MAX_RECORD_MS / 1000.0,
-                ),
-                color = Ds.recording, fontSize = 13.sp,
-                fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-            )
-            Spacer(Modifier.height(8.dp))
-        } else if (state.burstTaken > 0) {
+        if (state.burstTaken > 0) {
             Text(
                 "● đã chụp %d/%d".format(state.burstTaken, BURST_COUNT),
                 color = Ds.recording, fontSize = 13.sp,
@@ -1509,11 +1311,8 @@ private fun CameraControls(
                         .size(76.dp)
                         .clip(RoundedCornerShape(Ds.rPill))
                         .background(Color(0x40FFFFFF))
-                        .clickable(
-                            enabled = enabled && (!state.recording || state.canStop) &&
-                                state.burstTaken == 0,
-                            onClick = onToggle,
-                        ),
+                        // Khi đang chụp dở, nút này vẫn bấm được — là để DỪNG SỚM.
+                        .clickable(enabled = enabled, onClick = onToggle),
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(
@@ -1523,7 +1322,7 @@ private fun CameraControls(
                             .background(
                                 when {
                                     !enabled -> Color(0x66FFFFFF)
-                                    state.recording || state.burstTaken > 0 -> Ds.recording
+                                    state.burstTaken > 0 -> Ds.recording
                                     else -> Color.White
                                 }
                             )
@@ -1537,12 +1336,10 @@ private fun CameraControls(
 
         Spacer(Modifier.height(8.dp))
         Text(
-            when {
-                state.recording && !state.canStop -> "Giữ máy yên…"
-                state.recording -> "Bấm để dừng và chọn ảnh"
-                state.burstTaken > 0 -> "Đang chụp — giữ máy yên…"
-                state.burstMode -> "Bấm để chụp %d tấm liên tiếp".format(BURST_COUNT)
-                else -> "Bấm để quay 15-30 giây"
+            if (state.burstTaken > 0) {
+                "Đang chụp — bấm để dừng sớm, giữ máy yên…"
+            } else {
+                "Bấm để chụp %d tấm liên tiếp".format(BURST_COUNT)
             },
             color = Color(0xCCFFFFFF), fontSize = 11.sp,
         )

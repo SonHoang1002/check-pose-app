@@ -2654,3 +2654,22 @@ Git) hoặc biến `JAVA_HOME`; script tính đường dẫn tương đối theo
 đẩy: `git grep -I -n -i -E "[A-Za-z]:[\\/](Users|PROJECTS|Program Files)|AppData|api[_-]?key"`.
 **Vì sao:** 21/09/2026 máy thứ hai kéo nhánh về không build được — Gradle đọc đường dẫn Java
 của máy kia. PO: không để lộ biến môi trường, khoá API, đường dẫn `C:/` trên GitHub.
+
+
+## 102. Camera bật ngay khi vào màn chụp, kể cả lúc đang phân tích ảnh mẫu
+
+**Sai:** `DisposableEffect(hasPermission)` khởi động camera ngay khi vào màn chụp. `TemplateAnalyzingScreen` chỉ che giao diện, camera vẫn chạy ngầm.
+**Đúng:** khoá camera theo `cameraCanBat = hasPermission && !state.analyzingTemplate && state.templateError == null`, và dùng `cameraCanBat` làm key của `DisposableEffect`.
+**Vì sao:** đèn camera sáng và tốn pin trong lúc người dùng chỉ đang chờ phân tích ảnh mẫu.
+
+## 103. Rời màn chụp khi camera chưa sẵn sàng → camera bật lại và không ai tắt
+
+**Sai:** `stop()` chỉ unbind khi `cameraProvider != null`. `start()` lấy provider bất đồng bộ, nên nếu rời màn trước khi provider xong thì listener vẫn `bindAll` sau đó.
+**Đúng:** cờ `stopped` — `stop()` đặt `true`, listener `return` sớm khi `stopped`, `start()` đặt lại `false`.
+**Vì sao:** đèn camera vẫn sáng khi người dùng đã sang màn khác (ví dụ thư viện).
+
+## 104. Chụp liên tiếp khoá nút cho tới khi đủ tấm; bấm đúp khởi động hai loạt
+
+**Sai:** nút chụp `enabled = burstTaken == 0`, nên người dùng phải chờ đủ 8 tấm (~4 giây) mới làm gì khác. Ngược lại, `burstTaken` chỉ cập nhật sau tấm đầu được lưu, nên bấm đúp trước đó sẽ khởi động hai loạt chồng lên nhau.
+**Đúng:** bấm lại khi đang chụp thì gọi `controller.stopBurst()` để dừng sớm. `captureBurst` có cờ `burstRunning` và bỏ qua lần gọi khi loạt đang chạy.
+**Vì sao:** `burstTaken` không đủ để chặn bấm đúp vì nó chưa được cập nhật ngay; cần cờ riêng ở controller.

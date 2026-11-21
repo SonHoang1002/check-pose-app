@@ -177,8 +177,8 @@ class CaptureViewModel : ViewModel() {
 
     /** Muc zoom doi (nguoi dung chum hai ngon tren khung xem truoc). */
     /**
-     * Đổi chế độ chụp. KHÁC HẲN `onModeChanged(burst)` bên dưới — cái đó chọn
-     * quay video hay chụp liên tục, cái này chọn AI cầm máy.
+     * Đổi cách bấm chụp: bấm tay hay tự đếm 5s. Đây là chuyện của NGƯỜI bấm nút,
+     * không liên quan tới cách camera chụp.
      */
     fun onAutoModeChanged(on: Boolean) = _state.update {
         it.copy(autoMode = on, countdown = null)
@@ -419,21 +419,10 @@ class CaptureViewModel : ViewModel() {
     }
 
     // -----------------------------------------------------------------
-    // Quay
+    // Chụp liên tiếp
     // -----------------------------------------------------------------
 
-    /** Nguoi dung doi giua quay video va chup lien tuc. */
-    fun onModeChanged(burst: Boolean) = _state.update {
-        it.copy(burstMode = burst, burstTaken = 0)
-    }
-
     fun onBurstProgress(taken: Int) = _state.update { it.copy(burstTaken = taken) }
-
-    fun onRecordingStarted() = _state.update { it.copy(recording = true, recordedMs = 0) }
-
-    fun onRecordingTick(elapsedMs: Long) = _state.update { it.copy(recordedMs = elapsedMs) }
-
-    fun onRecordingStopped() = _state.update { it.copy(recording = false) }
 
     fun onProcessing(progress: Float, note: String) = _state.update {
         it.copy(processing = true, processProgress = progress.coerceIn(0f, 1f), processNote = note)
