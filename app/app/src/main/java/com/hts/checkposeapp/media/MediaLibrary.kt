@@ -17,8 +17,8 @@ import java.io.File
  *
  * Nạp file vào bằng:
  * ```
- * adb push <file> /sdcard/Android/data/com.example.posecoach/files/templates/
- * adb push <file> /sdcard/Android/data/com.example.posecoach/files/camera/
+ * adb push <file> /sdcard/Android/data/com.hts.checkposeapp/files/templates/
+ * adb push <file> /sdcard/Android/data/com.hts.checkposeapp/files/camera/
  * ```
  */
 object MediaLibrary {

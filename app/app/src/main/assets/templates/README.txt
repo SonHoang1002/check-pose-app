@@ -53,7 +53,7 @@ Khong gan thi huong dan zoom/khoang cach dua ca hai lua chon "di bo hoac zoom".
 
 SAU KHI THEM HOAC BO ANH — BAT BUOC LAM BUOC NAY
 ------------------------------------------------
-Mo file:   app/app/src/main/java/com/example/posecoach/media/MediaLibrary.kt
+Mo file:   app/app/src/main/java/com/hts/checkposeapp/media/MediaLibrary.kt
 Tim dong:  private const val SEED_MARKER = ".da-nap-anh-mau-v8"
 Doi so cuoi:  v8 -> v9  (lan sau nua: v9 -> v10)
 

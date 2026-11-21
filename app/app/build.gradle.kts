@@ -4,13 +4,13 @@ plugins {
 }
 
 android {
-    namespace = "com.example.posecoach"
+    namespace = "com.hts.checkposeapp"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.example.posecoach"
+        applicationId = "com.hts.checkposeapp"
         minSdk = 29
         targetSdk = 37
         versionCode = 1
