@@ -1,0 +1,177 @@
+﻿package com.hts.checkposeapp.capture
+
+import android.graphics.Bitmap
+import com.hts.checkposeapp.guidance.CriterionStatus
+import com.hts.checkposeapp.pose.FramingClass
+import com.hts.checkposeapp.pose.PoseFrame
+import java.io.File
+
+/**
+ * Trạng thái MÀN CHỤP THẬT — camera thật, quay video thật.
+ *
+ * Nguồn hình là camera thật; mọi thứ phía sau (đo, chấm điểm, chọn 5 ảnh) đọc từ
+ * file video. Mọi thứ phía sau (đo, chấm điểm, chọn 5 ảnh) dùng chung code.
+ */
+data class CaptureUiState(
+    /** Độ giống ảnh mẫu ngay lúc này, 0..100. `null` = chưa đo được. */
+    val matchPercent: Int? = null,
+
+    /** Đã đủ giống để chuẩn bị tạo dáng và bấm quay. */
+    val readyToPose: Boolean = false,
+
+    /** Người dùng bật chế độ tự động đếm ngược rồi quay. */
+    val autoMode: Boolean = false,
+
+    /** Giây còn lại của đồng hồ đếm ngược. `null` = chưa đếm. */
+    val countdown: Int? = null,
+
+
+    /** Chế độ chụp: người khác cầm máy, hay tự chụp qua gương. */
+    val mode: com.hts.checkposeapp.guidance.ShootMode =
+        com.hts.checkposeapp.guidance.ShootMode.NGUOI_KHAC,
+
+    // --- Ảnh mẫu ---
+    val templateName: String = "",
+    val templateThumb: Bitmap? = null,
+    val templateFraming: FramingClass? = null,
+    val templateError: String? = null,
+    val analyzingTemplate: Boolean = true,
+    /**
+     * Ảnh mẫu này sẽ được chấm theo những tiêu chí nào, và bỏ qua gì vì sao.
+     * Hiện lên màn hình để người dùng biết app đang soi cái gì.
+     */
+    val criteriaSummary: List<String> = emptyList(),
+    /**
+     * TRANG THAI SONG cua tung tieu chi - nguon duy nhat de ve danh sach dau tich.
+     *
+     * ⚠️ Truoc day cho nay chi la `List<String>` (danh sach TEN), nen bang tieu chi
+     * tren man hinh **nam im**: dat hay khong deu hien nhu nhau. Day dung thu
+     * `CLAUDE.md` da canh bao truoc — *"danh sach 6 dieu kien phai SONG"*.
+     */
+    val criteria: List<CriterionStatus> = emptyList(),
+
+
+    /**
+     * ⚠️ TẠM — số đo thật của mấy mục hay sai, hiện lên màn hình.
+     *
+     * Có vì một lý do cụ thể: PO báo *"máy liên tục nhắc zoom lại gần và hạ máy
+     * xuống, càng hạ càng sai"* với một ảnh mẫu chụp thẳng chính diện. Không tái
+     * hiện được trên máy dev, mà đoán thêm một vòng nữa thì tốn một buổi test.
+     *
+     * Hiện thẳng `ảnh mẫu / khung hình` của từng mục thì buổi test sau nói ngay
+     * được mục nào lệch và lệch bao nhiêu. Gỡ sau khi tìm ra.
+     */
+    val debugDo: String? = null,
+
+    /**
+     * ⚠️ TẠM — góc máy đo bằng CẢM BIẾN đặt cạnh góc máy SUY TỪ ẢNH của cùng khung
+     * hình, chữ to để đọc được khi đang cầm máy (14/09/2026).
+     *
+     * Trả lời đúng một câu hỏi còn treo: phép suy góc từ trục thân có lệch trên
+     * ảnh chụp bằng điện thoại không. Video test 13/09/2026 cầm máy thẳng mà phép
+     * suy đọc −14 … −23°, nhưng lúc đó không có số cảm biến để biết người chụp có
+     * thật sự đang chúc hay không.
+     *
+     * - Hai số gần nhau → phép suy đúng.
+     * - Số suy từ ảnh thấp hơn đều một khoảng → bị lệch, phải hiệu chỉnh — nếu không
+     *   ảnh chụp bằng điện thoại mà người dùng tự nhập sẽ bị hướng dẫn sai góc.
+     *
+     * Gỡ sau khi có kết quả.
+     */
+    val debugGocMay: String? = null,
+
+    /** Anh mau la anh doc hay ngang. `null` = chua biet. */
+    val templatePortrait: Boolean? = null,
+
+
+    // --- Camera ---
+    val cameraReady: Boolean = false,
+    val cameraError: String? = null,
+    /** Máy yếu có thể không chạy nổi nhận diện trong lúc quay — phải báo, không im lặng. */
+    val liveDetectionActive: Boolean = true,
+
+    // --- Nhận diện thời gian thực ---
+    val pose: PoseFrame = PoseFrame.EMPTY,
+    val personDetected: Boolean = false,
+    val visiblePoints: Int = 0,
+    val bodyYawDeg: Double? = null,
+    val liveFraming: FramingClass? = null,
+    val inferenceMs: Long = 0,
+    /** Kích thước khung hình đưa vào nhận diện — cần để vẽ khung xương đúng chỗ. */
+    val frameWidth: Int = 0,
+    val frameHeight: Int = 0,
+
+    // --- Engine huong dan (Buoc 4) ---
+
+    /** Cau nhac dang hien. Moi luc dung MOT cau. `null` = khong nhac gi. */
+    val cue: String? = null,
+
+    /**
+     * Canh bao ve CACH CAM MAY (xoay ngang, dang zoom).
+     *
+     * Tach khoi 6 tieu chi vi no lam **moi phep do phia sau mat nghia** — nhac
+     * "lui lai mot buoc" trong luc nguoi ta cam ngang may la nhac sai viec.
+     */
+    val prepWarning: String? = null,
+
+    /** Cau dang hien la cau de DOC TO CHO MAU NGHE. */
+    val cueForModel: Boolean = false,
+
+    /** Du dieu kien de bam quay chua. */
+    val readyToCapture: Boolean = false,
+
+    /** Da giu on dinh duoc bao lau, mili giay. */
+    val stableForMs: Long = 0,
+
+    /** May dang cam doc hay ngang. */
+    val devicePortrait: Boolean = true,
+
+    /** Muc zoom hien tai. 1,0 = tieu cu goc. */
+    val zoomRatio: Float = 1f,
+
+    // --- Quay / chup lien tuc ---
+
+    /**
+     * Dang o che do CHUP LIEN TUC thay vi quay video.
+     *
+     * Hai duong nay khong thay the nhau: video bat duoc moi khoanh khac trong
+     * 15-30 giay nhung moi anh la khung cat ra; chup lien tuc chi bat 8 khoanh
+     * khac nhung moi anh la **anh chup that, full do phan giai**.
+     */
+    val burstMode: Boolean = false,
+
+    /** So anh da chup xong trong loat hien tai. */
+    val burstTaken: Int = 0,
+
+    val recording: Boolean = false,
+    val recordedMs: Long = 0,
+
+    // --- Chấm điểm sau khi quay ---
+    val processing: Boolean = false,
+    val processProgress: Float = 0f,
+    val processNote: String = "",
+
+    /** Đã chốt xong danh sách ảnh — chuyển sang màn xem lại. */
+    val finishedSession: File? = null,
+) {
+    /** Quay đủ lâu để có gì mà chọn chưa. */
+    val canStop: Boolean get() = recordedMs >= MIN_RECORD_MS
+
+    companion object {
+        /** Ngắn hơn mức này thì gần như không có khung nào khác nhau để chọn. */
+        const val MIN_RECORD_MS = 3_000L
+
+        /**
+         * Tự dừng ở mốc này. Tài liệu sản phẩm chốt 15-30 giây; quay dài hơn chỉ
+         * tốn chỗ và làm bước chấm điểm lâu, không cho thêm ảnh đẹp nào.
+         */
+        const val MAX_RECORD_MS = 30_000L
+    }
+}
+
+sealed interface CaptureAction {
+    data object ToggleRecording : CaptureAction
+
+    /** Nguoi dung bam vao canh bao zoom de dua zoom ve 1,0x. */
+    data object ResetZoom : CaptureAction
+}
