@@ -7,7 +7,6 @@ import android.view.OrientationEventListener
 import android.view.Surface
 import android.view.WindowManager
 import androidx.camera.core.Camera
-import androidx.camera.core.MirrorMode
 import com.hts.checkposeapp.guidance.ShootMode
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -15,14 +14,6 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.video.FallbackStrategy
-import androidx.camera.video.FileOutputOptions
-import androidx.camera.video.Quality
-import androidx.camera.video.QualitySelector
-import androidx.camera.video.Recorder
-import androidx.camera.video.Recording
-import androidx.camera.video.VideoCapture
-import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
@@ -33,13 +24,10 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
- * CAMERA THẬT cho màn chụp — xem trước, nhận diện thời gian thực, và **quay video**.
+ * CAMERA THẬT cho màn chụp — xem trước, nhận diện thời gian thực, và **chụp liên tiếp**.
  *
- * Vì sao phải quay video thật thay vì lưu lại khung hình đã nhận diện: khung hình
- * đưa vào bộ nhận diện chỉ khoảng 640px (cố ý, cho nhanh). Lưu chúng ra làm ảnh
- * cuối thì ảnh xấu — và tệ hơn, ta sẽ **tự trả lời sai** câu hỏi lớn nhất của dự
- * án (*"khung cắt từ video có đẹp bằng ảnh chụp thường không"*). Quay 1080p rồi
- * cắt khung mới đúng thiết kế đã chốt.
+ * Chụp liên tiếp bằng ảnh chụp thật (full độ phân giải). Không lưu khung hình đã
+ * nhận diện làm ảnh cuối: khung đó chỉ ~640px, cố ý nhỏ cho nhanh.
  *
  * Đây là bộ điều khiển camera DUY NHẤT của app. Trước đây có một bản sao rút gọn
  * cho màn đo số liệu, và phần theo dõi hướng cầm máy bị nhân đôi ở hai chỗ — sửa
@@ -62,25 +50,6 @@ class CaptureController(
     private val onError: (String) -> Unit,
 ) {
 
-    /**
-     * HAI CÁCH BẮT ẢNH, người dùng chọn.
-     *
-     * Bản iOS có cả hai và bản Android trước đây chỉ có [VIDEO]. Chúng KHÔNG thay
-     * thế nhau — mỗi cách mạnh ở một tình huống khác hẳn:
-     *
-     * | | [VIDEO] | [BURST] |
-     * |---|---|---|
-     * | Bắt được gì | mọi khoảnh khắc trong 15-30 giây | 8 khoảnh khắc quanh lúc bấm |
-     * | Chất lượng mỗi ảnh | khung cắt từ video (thấp hơn) | **ảnh chụp thật, full độ phân giải** |
-     * | Hợp với | mẫu đang cử động, cười nói tự nhiên | mẫu đã vào dáng, chỉ chờ đúng lúc |
-     * | Rác sinh ra | 60-100 MB video thô | vài MB ảnh |
-     *
-     * ⚠️ [BURST] còn trả lời hộ câu hỏi lớn nhất của dự án — *"ảnh cắt từ video có
-     * đẹp bằng ảnh chụp thường không"* — vì giờ hai đường nằm cạnh nhau trong cùng
-     * một app, so trực tiếp được.
-     */
-    enum class Mode { VIDEO, BURST }
-
     enum class DeviceRotation(val surfaceRotation: Int, val isPortrait: Boolean) {
         PORTRAIT(Surface.ROTATION_0, true),
         LANDSCAPE_LEFT(Surface.ROTATION_90, false),
@@ -90,7 +59,6 @@ class CaptureController(
 
     private var analysisExecutor: ExecutorService? = null
     private var imageAnalysis: ImageAnalysis? = null
-    private var videoCapture: VideoCapture<Recorder>? = null
     private var cameraProvider: ProcessCameraProvider? = null
 
     /**
@@ -102,7 +70,6 @@ class CaptureController(
      * sáng khi đã sang màn khác.
      */
     private var stopped = false
-    private var recording: Recording? = null
 
     /**
      * Camera đang gắn — giữ lại CHỈ để đọc và đặt lại mức zoom.
@@ -122,10 +89,6 @@ class CaptureController(
     private var boundLifecycleOwner: LifecycleOwner? = null
     private var boundPreviewView: PreviewView? = null
     private var boundExecutor: ExecutorService? = null
-
-    /** Cách bắt ảnh đang dùng. Đổi bằng [setMode] — việc đó gắn lại camera. */
-    var mode: Mode = Mode.VIDEO
-        private set
 
     /**
      * Camera trước hay sau, và ảnh ghi ra có lật không.
@@ -147,24 +110,6 @@ class CaptureController(
         val doiCamera = next.camTruoc != shootMode.camTruoc
         shootMode = next
         if (!doiCamera) return
-        val p = cameraProvider ?: return
-        val lo = boundLifecycleOwner ?: return
-        val pv = boundPreviewView ?: return
-        val ex = boundExecutor ?: return
-        bindAll(p, lo, pv, ex)
-    }
-
-    /**
-     * Video quay khung 16:9 hay 4:3. Khung chọn hẹp hơn 3:4 (9:16, Full) thì quay
-     * 16:9 để không mất độ phân giải; còn lại quay 4:3 để đủ phần hai bên.
-     */
-    private var video169 = false
-
-    /** Người dùng đổi tỉ lệ khung. Chỉ gắn lại camera khi phải đổi khung quay video. */
-    fun setTiLeKhung(tiLeDoc: Double) {
-        val next = tiLeDoc < TI_LE_4_3_DOC - 0.02
-        if (next == video169) return
-        video169 = next
         val p = cameraProvider ?: return
         val lo = boundLifecycleOwner ?: return
         val pv = boundPreviewView ?: return
@@ -370,7 +315,6 @@ class CaptureController(
             // bộ nhận diện bị nghiêng 90° khi cầm ngang — app chạy bình thường,
             // không báo lỗi, chỉ có hướng dẫn sai (FOOTGUNS mục 10).
             imageAnalysis?.targetRotation = next.surfaceRotation
-            videoCapture?.targetRotation = next.surfaceRotation
             // ⚠️ Cả bộ CHỤP ẢNH (chế độ chụp liên tục) — thiếu dòng này thì ảnh ra nằm
             // ngang (video test 19/09/2026): cảm biến lỡ báo "ngang" lúc máy chúc gần
             // phẳng, người dùng đổi sang chụp liên tục đúng lúc đó, bộ chụp dựng theo
@@ -378,20 +322,6 @@ class CaptureController(
             imageCapture?.targetRotation = next.surfaceRotation
             onRotationChanged(next)
         }
-    }
-
-    /**
-     * Đổi cách bắt ảnh. Phải gắn lại camera vì hai chế độ dùng hai bộ chức năng
-     * khác nhau — CameraX không cho bật cả bốn cùng lúc trên máy phổ thông.
-     */
-    fun setMode(next: Mode) {
-        if (next == mode) return
-        mode = next
-        val provider = cameraProvider ?: return
-        val owner = boundLifecycleOwner ?: return
-        val view = boundPreviewView ?: return
-        val executor = boundExecutor ?: return
-        bindAll(provider, owner, view, executor)
     }
 
     fun start(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
@@ -425,12 +355,12 @@ class CaptureController(
     }
 
     /**
-     * Gắn 3 chức năng cùng lúc: xem trước + nhận diện + quay video.
+     * Gắn 3 chức năng cùng lúc: xem trước + nhận diện + chụp.
      *
      * ⚠️ Không phải máy nào cũng chạy được cả ba. CameraX bảo đảm tổ hợp này từ mức
      * phần cứng `LIMITED` trở lên — đúng mức sàn dự án đã chốt — nhưng máy đời cũ
      * vẫn có thể từ chối. Nên có đường lui: bỏ phần nhận diện, giữ xem trước và
-     * quay video, và **nói rõ cho người dùng biết** thay vì im lặng chạy thiếu.
+     * chụp, và **nói rõ cho người dùng biết** thay vì im lặng chạy thiếu.
      */
     private fun bindAll(
         provider: ProcessCameraProvider,
@@ -441,27 +371,6 @@ class CaptureController(
         val preview = Preview.Builder().build().also {
             it.surfaceProvider = previewView.surfaceProvider
         }
-
-        val recorder = Recorder.Builder()
-            .setAspectRatio(
-                if (video169) androidx.camera.core.AspectRatio.RATIO_16_9
-                else androidx.camera.core.AspectRatio.RATIO_4_3
-            )
-            // Ưu tiên Full HD. Không được thì tụt xuống mức thấp hơn gần nhất chứ
-            // không bỏ cuộc — quay được ở chất lượng thấp vẫn hơn không quay được.
-            .setQualitySelector(
-                QualitySelector.from(Quality.FHD, FallbackStrategy.lowerQualityOrHigherThan(Quality.HD))
-            )
-            .build()
-        // ⚠️ Lật ảnh ghi ra phải đặt lúc DỰNG, không gán được sau. Xem [shootMode].
-        val capture = VideoCapture.Builder(recorder)
-            .setMirrorMode(
-                if (shootMode.latGuong && shootMode.camTruoc) MirrorMode.MIRROR_MODE_ON
-                else MirrorMode.MIRROR_MODE_OFF
-            )
-            .build()
-            .also { it.targetRotation = currentRotation.surfaceRotation }
-        videoCapture = capture
 
         val analysis = ImageAnalysis.Builder()
             // Bận thì VỨT khung mới, không xếp hàng. Xếp hàng gây trễ dồn —
@@ -481,12 +390,9 @@ class CaptureController(
                 }
             }
 
-        // ⚠️ CHỤP LIÊN TỤC và QUAY VIDEO không bật cùng lúc được.
-        //
-        // CameraX chỉ bảo đảm ba chức năng một lúc ở mức phần cứng LIMITED. Đòi cả
-        // bốn (xem trước + nhận diện + quay + chụp) thì máy phổ thông từ chối gắn,
-        // và lỗi đó chỉ lộ ra lúc chạy trên máy thật. Nên mỗi chế độ gắn đúng bộ
-        // chức năng nó cần.
+        // ⚠️ Chỉ gắn BA chức năng (xem trước + nhận diện + chụp). CameraX chỉ bảo đảm
+        // ba chức năng một lúc ở mức phần cứng LIMITED; thêm chức năng thứ tư thì máy
+        // phổ thông từ chối gắn, và lỗi đó chỉ lộ ra lúc chạy trên máy thật.
         val photo = ImageCapture.Builder()
             // Ưu tiên GIẢM ĐỘ TRỄ hơn giảm nhiễu: chụp liên tục là để bắt khoảnh
             // khắc, chụp chậm một nhịp là mất đúng thứ cần bắt.
@@ -494,17 +400,14 @@ class CaptureController(
             .setTargetRotation(currentRotation.surfaceRotation)
             .build()
 
-        val third = if (mode == Mode.BURST) photo else capture
-
         provider.unbindAll()
         try {
             camera = provider.bindToLifecycle(
                 lifecycleOwner, selector(),
-                preview, third, analysis,
+                preview, photo, analysis,
             )
             imageAnalysis = analysis
-            imageCapture = if (mode == Mode.BURST) photo else null
-            videoCapture = if (mode == Mode.BURST) null else capture
+            imageCapture = photo
             liveDetectionActive = true
             camera?.cameraControl?.setExposureCompensationIndex(exposureIndex)
         } catch (e: Exception) {
@@ -515,11 +418,10 @@ class CaptureController(
             provider.unbindAll()
             camera = provider.bindToLifecycle(
                 lifecycleOwner, selector(),
-                preview, third,
+                preview, photo,
             )
             camera?.cameraControl?.setExposureCompensationIndex(exposureIndex)
-            imageCapture = if (mode == Mode.BURST) photo else null
-            videoCapture = if (mode == Mode.BURST) null else capture
+            imageCapture = photo
             onError(
                 "Máy này không chạy được nhận diện trong lúc quay. " +
                     "Vẫn quay được, và app sẽ chấm điểm sau khi quay xong."
@@ -554,12 +456,18 @@ class CaptureController(
             onDone(emptyList())
             return
         }
+        // Đang có loạt chạy thì bỏ qua lần bấm này. Bấm đúp trước khi tấm đầu được lưu
+        // sẽ khởi động hai loạt chồng lên nhau — cờ này chặn việc đó.
+        if (burstRunning) return
+        burstRunning = true
         dir.mkdirs()
         val taken = mutableListOf<File>()
         val executor = ContextCompat.getMainExecutor(context)
+        burstStopping = false
 
         fun shoot(index: Int) {
-            if (index >= count) {
+            if (index >= count || burstStopping) {
+                burstRunning = false
                 onDone(taken.toList())
                 return
             }
@@ -594,53 +502,22 @@ class CaptureController(
         shoot(0)
     }
 
-    private val previewHandler = android.os.Handler(android.os.Looper.getMainLooper())
-
-    // -----------------------------------------------------------------
-    // Quay video
-    // -----------------------------------------------------------------
-
-    val isRecording: Boolean get() = recording != null
-
     /**
-     * Bắt đầu quay vào [outputFile].
+     * Dừng loạt ngay sau tấm đang chụp, không chờ đủ số tấm đã hẹn.
      *
-     * KHÔNG thu tiếng — sản phẩm không dùng tới, mà xin quyền micro sẽ làm người
-     * dùng nghi ngờ vô cớ ở một app chụp ảnh.
-     *
-     * @param onFinished gọi khi quay xong. `null` nghĩa là quay hỏng.
+     * Tấm đang chụp dở vẫn được giữ; [onDone] được gọi một lần với những gì đã chụp.
      */
-    fun startRecording(outputFile: File, onFinished: (File?) -> Unit) {
-        val capture = videoCapture
-        if (capture == null) {
-            onError("Camera chưa sẵn sàng để quay")
-            onFinished(null)
-            return
-        }
-        if (recording != null) return
-
-        val options = FileOutputOptions.Builder(outputFile).build()
-        recording = capture.output
-            .prepareRecording(context, options)
-            .start(ContextCompat.getMainExecutor(context)) { event ->
-                if (event is VideoRecordEvent.Finalize) {
-                    recording = null
-                    if (event.hasError()) {
-                        Log.e(TAG, "Quay hỏng, mã lỗi ${event.error}")
-                        onError("Quay video hỏng (mã ${event.error}). Thử lại được.")
-                        runCatching { outputFile.delete() }
-                        onFinished(null)
-                    } else {
-                        onFinished(outputFile)
-                    }
-                }
-            }
+    fun stopBurst() {
+        burstStopping = true
     }
 
-    /** Dừng quay. Kết quả trả về qua `onFinished` đã truyền lúc bắt đầu. */
-    fun stopRecording() {
-        recording?.stop()
-    }
+    /** Cờ dừng loạt đang chạy. Đặt lại mỗi lần [captureBurst] bắt đầu. */
+    private var burstStopping = false
+
+    /** Có loạt đang chạy hay không — từ lúc bắt đầu đến khi [onDone] được gọi. */
+    private var burstRunning = false
+
+    private val previewHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     // -----------------------------------------------------------------
 
@@ -655,8 +532,6 @@ class CaptureController(
     fun stop() {
         stopped = true
         orientationListener.disable()
-        recording?.stop()
-        recording = null
         imageAnalysis?.clearAnalyzer()
         cameraProvider?.unbindAll()
         analysisExecutor?.let { exec ->
@@ -670,13 +545,10 @@ class CaptureController(
         }
         cameraProvider = null
         imageAnalysis = null
-        videoCapture = null
         analysisExecutor = null
     }
 
     private companion object {
         const val TAG = "CaptureController"
-        /** Tỉ lệ ngang/dọc của cảm biến 4:3 khi cầm dọc. */
-        const val TI_LE_4_3_DOC = 3.0 / 4.0
     }
 }

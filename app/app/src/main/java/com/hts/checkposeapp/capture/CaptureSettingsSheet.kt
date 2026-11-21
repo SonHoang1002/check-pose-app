@@ -42,11 +42,9 @@ import com.hts.checkposeapp.ui.theme.Ds
 fun CaptureSettingsSheet(
     autoMode: Boolean,
     onAutoMode: (Boolean) -> Unit,
-    burst: Boolean,
-    onBurst: (Boolean) -> Unit,
     tiLeNhan: String,
     onTiLeTiep: () -> Unit,
-    khoaKhiDangQuay: Boolean,
+    khoaKhiDangChup: Boolean,
     showGrid: Boolean,
     onGrid: (Boolean) -> Unit,
     showSkeleton: Boolean,
@@ -76,21 +74,12 @@ fun CaptureSettingsSheet(
                 labelOff = "Bấm tay",
                 labelOn = "Tự đếm 5s",
                 on = autoMode,
-                enabled = !khoaKhiDangQuay,
+                enabled = !khoaKhiDangChup,
                 onChange = onAutoMode,
             )
             Hint(
                 if (autoMode) "Tự động sẽ bỏ qua mục bị kẹt sau khoảng 6 giây."
                 else "Bạn có thể bấm chụp bất cứ lúc nào."
-            )
-
-            SectionLabel("Kiểu chụp")
-            Segmented(
-                labelOff = "Quay video",
-                labelOn = "Chụp liên tục",
-                on = burst,
-                enabled = !khoaKhiDangQuay,
-                onChange = onBurst,
             )
 
             SectionLabel("Khung hình")
@@ -99,19 +88,19 @@ fun CaptureSettingsSheet(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(Ds.rCard))
                     .background(Ds.surfaceMuted)
-                    .clickable(enabled = !khoaKhiDangQuay, onClick = onTiLeTiep)
+                    .clickable(enabled = !khoaKhiDangChup, onClick = onTiLeTiep)
                     .padding(horizontal = 14.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     "Tỉ lệ khung",
-                    color = if (khoaKhiDangQuay) Ds.textMuted else Ds.text,
+                    color = if (khoaKhiDangChup) Ds.textMuted else Ds.text,
                     fontSize = 15.sp,
                     modifier = Modifier.weight(1f),
                 )
                 Text(tiLeNhan, color = Ds.primary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
-            if (khoaKhiDangQuay) Hint("Không đổi được khi đang quay hoặc chụp liên tục.")
+            if (khoaKhiDangChup) Hint("Không đổi được khi đang chụp liên tiếp.")
 
             SectionLabel("Hiển thị")
             SwitchRow("Lưới 3×3", showGrid, onGrid)

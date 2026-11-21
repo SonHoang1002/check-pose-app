@@ -7,7 +7,7 @@ import com.hts.checkposeapp.pose.PoseFrame
 import java.io.File
 
 /**
- * Trạng thái MÀN CHỤP THẬT — camera thật, quay video thật.
+ * Trạng thái MÀN CHỤP THẬT — camera thật, chụp liên tiếp.
  *
  * Nguồn hình là camera thật; mọi thứ phía sau (đo, chấm điểm, chọn 5 ảnh) đọc từ
  * file video. Mọi thứ phía sau (đo, chấm điểm, chọn 5 ảnh) dùng chung code.
@@ -129,49 +129,21 @@ data class CaptureUiState(
     /** Muc zoom hien tai. 1,0 = tieu cu goc. */
     val zoomRatio: Float = 1f,
 
-    // --- Quay / chup lien tuc ---
+    // --- Chụp liên tiếp ---
 
-    /**
-     * Dang o che do CHUP LIEN TUC thay vi quay video.
-     *
-     * Hai duong nay khong thay the nhau: video bat duoc moi khoanh khac trong
-     * 15-30 giay nhung moi anh la khung cat ra; chup lien tuc chi bat 8 khoanh
-     * khac nhung moi anh la **anh chup that, full do phan giai**.
-     */
-    val burstMode: Boolean = false,
-
-    /** So anh da chup xong trong loat hien tai. */
+    /** Số ảnh đã chụp xong trong loạt hiện tại. */
     val burstTaken: Int = 0,
 
-    val recording: Boolean = false,
-    val recordedMs: Long = 0,
-
-    // --- Chấm điểm sau khi quay ---
+    // --- Chấm điểm sau khi chụp ---
     val processing: Boolean = false,
     val processProgress: Float = 0f,
     val processNote: String = "",
 
     /** Đã chốt xong danh sách ảnh — chuyển sang màn xem lại. */
     val finishedSession: File? = null,
-) {
-    /** Quay đủ lâu để có gì mà chọn chưa. */
-    val canStop: Boolean get() = recordedMs >= MIN_RECORD_MS
-
-    companion object {
-        /** Ngắn hơn mức này thì gần như không có khung nào khác nhau để chọn. */
-        const val MIN_RECORD_MS = 3_000L
-
-        /**
-         * Tự dừng ở mốc này. Tài liệu sản phẩm chốt 15-30 giây; quay dài hơn chỉ
-         * tốn chỗ và làm bước chấm điểm lâu, không cho thêm ảnh đẹp nào.
-         */
-        const val MAX_RECORD_MS = 30_000L
-    }
-}
+)
 
 sealed interface CaptureAction {
-    data object ToggleRecording : CaptureAction
-
     /** Nguoi dung bam vao canh bao zoom de dua zoom ve 1,0x. */
     data object ResetZoom : CaptureAction
 }
