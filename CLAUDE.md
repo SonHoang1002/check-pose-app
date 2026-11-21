@@ -367,7 +367,7 @@ và dễ sinh lỗi kiểu "app đứng im mà không ai hiểu vì sao":
 | Lớp Swift | Làm gì |
 |---|---|
 | `CriterionGate` | Vùng trễ 3 mức, debounce vào/ra, khoá mục đã đạt, chống kẹt (`stallTimeout`) |
-| `CuePresenter` | Mỗi lúc 1 câu, câu đã hiện ở lại tối thiểu 1,2s, số đổi 1 lần/giây, đóng băng khi lắc mạnh |
+| `CuePresenter` | Mỗi lúc 1 câu, câu đã hiện ở lại tối thiểu 2s, số đổi 1 lần/giây, đóng băng khi lắc mạnh |
 | `CaptureTrigger` | Giữ ổn định 0,8s → đếm ngược 3s → ghi **ngay từ lúc bắt đầu đếm** |
 
 **Đọc để hiểu cách làm, rồi viết lại theo quy ước Kotlin — không chép mù.**
@@ -461,7 +461,7 @@ khác chụp. Chọn ảnh nhóm nào thì app tự đặt chế độ chụp t�
 |---|---|
 | `guidance/GuidanceConfig.kt` | **CHỖ DUY NHẤT chứa ngưỡng** — buổi đo chỉ sửa file này |
 | `guidance/CriterionGate.kt` | Vùng trễ 3 mức, debounce, khoá mục đã đạt, **chống kẹt** |
-| `guidance/CuePresenter.kt` | Mỗi lúc 1 câu, giữ 1,2s, số đổi 1 lần/giây, đóng băng khi lắc |
+| `guidance/CuePresenter.kt` | Mỗi lúc 1 câu, giữ 2s, số đổi 1 lần/giây, đóng băng khi lắc |
 | `guidance/GuidanceEngine.kt` | Ghép 3 thứ trên, đọc `ShotScorer.deviation` — **cùng hàm với chấm điểm** |
 | `guidance/CameraPrep.kt` | Nhắc xoay máy về đúng hướng ảnh mẫu · cảnh báo **zoom** |
 
@@ -484,7 +484,7 @@ Mỗi lớp hụt ở một tình huống khác nhau, nên phải có đủ cả
 cắt xong 5 ảnh**, và `sweepRecordings()` vớt nốt nếu app bị giết giữa chừng.
 
 Ảnh giữ lại nằm ở `files/ket-qua/`. Rút về máy tính:
-`adb pull /sdcard/Android/data/com.example.posecoach/files/ket-qua/`
+`adb pull /sdcard/Android/data/com.hts.checkposeapp/files/ket-qua/`
 
 ## ⚠️ Bộ chạy thử bằng video — ĐÃ XOÁ 05/09/2026
 
@@ -518,9 +518,9 @@ KHÔNG cần xin quyền đọc bộ nhớ). Ảnh tự chọn được **chép 
 đọc được; phải để app tự tạo trước.
 
 ```bash
-BASE=/sdcard/Android/data/com.example.posecoach/files
+BASE=/sdcard/Android/data/com.hts.checkposeapp/files
 adb shell rm -rf $BASE/templates $BASE/camera
-adb shell am start -n com.example.posecoach/.MainActivity   # app tự tạo thư mục
+adb shell am start -n com.hts.checkposeapp/.MainActivity   # app tự tạo thư mục
 sleep 3
 adb push <anh>.jpg $BASE/templates/
 adb push <video>.mp4 $BASE/camera/
@@ -714,10 +714,10 @@ Mục tiêu hiệu năng: **vòng đo ≥ 8-10 khung hình/giây**, độ trễ 
 > Agent phải **chủ động nhắc lại** mỗi khi người dùng nói tới phát hành, lên Google Play,
 > build bản release, hoặc ký APK.
 
-### Đổi tên định danh app: `com.example.posecoach` → tên thật
+### Đổi tên định danh app: `com.example.posecoach` → `com.hts.checkposeapp` (ĐÃ XONG 21/11/2026)
 
-- **Hiện trạng:** `namespace` và `applicationId` trong `app/app/build.gradle.kts` vẫn là
-  `com.example.posecoach` (giá trị mặc định của Android Studio).
+- **Hiện trạng:** `namespace` và `applicationId` trong `app/app/build.gradle.kts` đã là
+  `com.hts.checkposeapp`; package mã nguồn cũng đã đổi cùng tên.
 - **Vấn đề:** Google Play **từ chối thẳng** mọi app có định danh bắt đầu bằng `com.example`.
 - **PO đã quyết (03/09/2026):** giữ nguyên trong lúc phát triển, đổi trước khi phát hành.
 - **Rủi ro nếu quên:** đổi định danh **sau khi đã phát hành** = app hoàn toàn mới, mất sạch
