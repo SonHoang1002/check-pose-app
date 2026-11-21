@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hts.checkposeapp.light.LightAnalysisCard
 import com.hts.checkposeapp.media.ResultLibrary
 import com.hts.checkposeapp.ui.theme.Ds
 import java.io.File
@@ -164,6 +165,7 @@ private fun ColumnScope.Body(state: ResultUiState, onAction: (ResultAction) -> U
         }
 
         ScoreBreakdown(state)
+        LightAnalysisCard(state.selected?.light)
         Spacer(Modifier.height(4.dp))
     }
 

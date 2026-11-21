@@ -92,6 +92,16 @@ class CaptureController(
     private var imageAnalysis: ImageAnalysis? = null
     private var videoCapture: VideoCapture<Recorder>? = null
     private var cameraProvider: ProcessCameraProvider? = null
+
+    /**
+     * Đã gọi [stop] — không được gắn camera nữa.
+     *
+     * ⚠️ Vì sao cần: [start] lấy provider BẤT ĐỒNG BỘ. Nếu người dùng rời màn chụp
+     * trước khi provider sẵn sàng, [stop] chạy lúc `cameraProvider` còn null nên không
+     * có gì để unbind; rồi listener vẫn chạy và BẬT camera, không ai tắt — đèn camera
+     * sáng khi đã sang màn khác.
+     */
+    private var stopped = false
     private var recording: Recording? = null
 
     /**
@@ -172,6 +182,34 @@ class CaptureController(
 
     /** Đưa zoom về đúng tiêu cự gốc. Gọi khi người dùng bấm nút sửa cảnh báo zoom. */
     fun resetZoom() = setZoom(1f)
+
+    /**
+     * Nấc bù sáng đang đặt. Nhớ lại để áp LẠI sau mỗi lần gắn lại camera (đổi chế độ
+     * chụp gắn lại toàn bộ, mức sáng sẽ mất nếu không nhớ).
+     */
+    private var exposureIndex = 0
+
+    /**
+     * Các nấc bù sáng máy cho chỉnh. `0..0` nghĩa là máy không hỗ trợ — màn hình ẩn thanh chỉnh.
+     */
+    fun exposureRange(): IntRange {
+        val st = camera?.cameraInfo?.exposureState ?: return 0..0
+        if (!st.isExposureCompensationSupported) return 0..0
+        val r = st.exposureCompensationRange
+        return r.lower..r.upper
+    }
+
+    /** Độ lớn một nấc bù sáng, đơn vị EV. Chỉ để hiển thị con số cho người dùng. */
+    fun exposureStepEv(): Float {
+        val step = camera?.cameraInfo?.exposureState?.exposureCompensationStep ?: return 0f
+        return step.numerator.toFloat() / step.denominator.toFloat()
+    }
+
+    /** Đặt bù sáng theo nấc. Gọi lại khi đã gắn camera, không có tác dụng trước đó. */
+    fun setExposureIndex(index: Int) {
+        exposureIndex = index
+        camera?.cameraControl?.setExposureCompensationIndex(index)
+    }
 
     /**
      * Đặt mức zoom. Tự kẹp vào khoảng máy này làm được, nên gọi 3x trên máy chỉ
@@ -357,6 +395,7 @@ class CaptureController(
     }
 
     fun start(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
+        stopped = false
         val executor = Executors.newSingleThreadExecutor()
         analysisExecutor = executor
         boundLifecycleOwner = lifecycleOwner
@@ -367,6 +406,8 @@ class CaptureController(
         providerFuture.addListener({
             try {
                 val provider = providerFuture.get()
+                // Đã rời màn trong lúc chờ provider: đừng bật camera lại.
+                if (stopped) return@addListener
                 cameraProvider = provider
                 bindAll(provider, lifecycleOwner, previewView, executor)
                 onReady(liveDetectionActive)
@@ -465,6 +506,7 @@ class CaptureController(
             imageCapture = if (mode == Mode.BURST) photo else null
             videoCapture = if (mode == Mode.BURST) null else capture
             liveDetectionActive = true
+            camera?.cameraControl?.setExposureCompensationIndex(exposureIndex)
         } catch (e: Exception) {
             Log.w(TAG, "Máy không chạy được cả 3 chức năng cùng lúc, bỏ phần nhận diện", e)
             analysis.clearAnalyzer()
@@ -475,6 +517,7 @@ class CaptureController(
                 lifecycleOwner, selector(),
                 preview, third,
             )
+            camera?.cameraControl?.setExposureCompensationIndex(exposureIndex)
             imageCapture = if (mode == Mode.BURST) photo else null
             videoCapture = if (mode == Mode.BURST) null else capture
             onError(
@@ -610,6 +653,7 @@ class CaptureController(
      * lỗi nào, app chỉ tắt ngóm. Đã gặp thật khi xoay máy (FOOTGUNS mục 11).
      */
     fun stop() {
+        stopped = true
         orientationListener.disable()
         recording?.stop()
         recording = null

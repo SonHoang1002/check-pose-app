@@ -3,6 +3,7 @@ package com.hts.checkposeapp.result
 import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hts.checkposeapp.light.LightAnalysis
 import com.hts.checkposeapp.media.UprightBitmap
 import com.hts.checkposeapp.capture.ShotStore
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +53,12 @@ class ResultViewModel : ViewModel() {
             val loaded = withContext(Dispatchers.IO) {
                 val thumb = decodeSampled(templateFile, 720)
                 val shots = s.readIndex().map { c ->
-                    ResultShot(candidate = c, bitmap = decodeSampled(s.file(c.id), 1280))
+                    val bmp = decodeSampled(s.file(c.id), 1280)
+                    ResultShot(
+                        candidate = c,
+                        bitmap = bmp,
+                        light = bmp?.let { LightAnalysis.of(it) },
+                    )
                 }
                 thumb to shots
             }
