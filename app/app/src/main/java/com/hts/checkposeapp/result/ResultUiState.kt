@@ -2,6 +2,7 @@ package com.hts.checkposeapp.result
 
 import android.graphics.Bitmap
 import com.hts.checkposeapp.capture.ShotCandidate
+import com.hts.checkposeapp.light.LightReading
 
 /**
  * Trạng thái màn xem lại — bước cuối của chuỗi lõi:
@@ -96,6 +97,8 @@ data class FailedCriterion(val label: String, val advice: String)
 data class ResultShot(
     val candidate: ShotCandidate,
     val bitmap: Bitmap?,
+    /** Ánh sáng của ảnh này, chỉ để hiển thị. `null` khi không đọc được ảnh. */
+    val light: LightReading? = null,
 ) {
     /** Điểm hiện cho người dùng: số nguyên 0-100. */
     val scoreText: String get() = "%.0f".format(candidate.score)

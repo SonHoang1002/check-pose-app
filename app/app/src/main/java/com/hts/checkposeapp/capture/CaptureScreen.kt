@@ -355,6 +355,19 @@ fun CaptureScreen(
         }
     }
 
+    // Thanh chỉnh độ sáng: các nấc bù sáng và độ lớn một nấc. Cũng là thuộc tính
+    // của phần cứng, đọc một lần sau khi camera sẵn sàng. Mức đang chọn giữ ở đây
+    // (không đưa vào ViewModel) vì nó chỉ phục vụ thanh trượt, không ảnh hưởng chấm điểm.
+    var exposureRange by remember { mutableStateOf(0..0) }
+    var exposureStepEv by remember { mutableStateOf(0f) }
+    var exposureIndex by remember { mutableStateOf(0) }
+    LaunchedEffect(state.cameraReady) {
+        if (state.cameraReady) {
+            exposureRange = controller?.exposureRange() ?: 0..0
+            exposureStepEv = controller?.exposureStepEv() ?: 0f
+        }
+    }
+
     // --- Cam bien nghieng + muc zoom ---
     //
     // Ca hai deu chay o nhip RIENG, khong dong bo voi nhip khung hinh camera:
@@ -618,6 +631,19 @@ fun CaptureScreen(
                         onPick = {
                             controller?.setZoom(it)
                             controller?.let { c -> vm.onZoomChanged(c.zoomRatio) }
+                        },
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+                // Ẩn khi máy không hỗ trợ bù sáng (khoảng `0..0`).
+                if (hasPermission && state.cameraReady && exposureRange.first != exposureRange.last) {
+                    BrightnessSlider(
+                        index = exposureIndex,
+                        range = exposureRange,
+                        stepEv = exposureStepEv,
+                        onChange = {
+                            exposureIndex = it
+                            controller?.setExposureIndex(it)
                         },
                     )
                     Spacer(Modifier.height(12.dp))
