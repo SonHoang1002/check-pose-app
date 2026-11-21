@@ -1,0 +1,251 @@
+package com.hts.checkposeapp.home
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.hts.checkposeapp.media.MediaLibrary
+import com.hts.checkposeapp.media.MediaLibrary.GocMayNhan
+import com.hts.checkposeapp.media.MediaLibrary.TemplateKind
+import com.hts.checkposeapp.media.UprightBitmap
+import com.hts.checkposeapp.pose.FramingClass
+import com.hts.checkposeapp.template.KieuChupTren
+import com.hts.checkposeapp.template.TemplateVerdict
+import com.hts.checkposeapp.ui.theme.Ds
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+
+/**
+ * BẢNG GẮN NHÃN ẢNH VỪA NHẬP — hiện NGAY sau khi chọn ảnh từ máy (15/09/2026).
+ *
+ * PO: *"khi user nhập ảnh, mở bottom sheet, preview ảnh, và user chọn tag góc nào
+ * thì sẽ hợp lý hơn là mở ảnh sau khi đã import thành template rồi hiện chọn tag"*.
+ *
+ * Bản trước chép ảnh vào thư viện TRƯỚC, rồi mới hỏi kiểu chụp / góc máy lẫn trong
+ * hộp thoại tiêu chí. Hai cái dở: ảnh chưa gắn nhãn đã nằm trong lưới (thoát giữa
+ * chừng là thành ảnh mẫu thiếu thông tin), và hộp thoại vừa hỏi vừa báo cáo.
+ *
+ * Giờ: xem ảnh → chọn nhãn → **"Lưu"** mới vào thư viện, và từ đó ảnh tự nhập đi
+ * đúng đường của ảnh cài sẵn. Huỷ hoặc vuốt đóng thì [onHuy] xoá file tạm.
+ *
+ * @param onLuu file đã đổi tên theo nhãn + kết quả phân tích (để khỏi phân tích lại).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun NhapAnhSheet(
+    file: File,
+    onHuy: () -> Unit,
+    onChonAnhKhac: () -> Unit,
+    onLuu: (File, PhanTichAnhMau) -> Unit,
+) {
+    val context = LocalContext.current
+    var anh by remember(file) { mutableStateOf<ImageBitmap?>(null) }
+    var kq by remember(file) { mutableStateOf<PhanTichAnhMau?>(null) }
+    var kieu by remember(file) { mutableStateOf(TemplateKind.PHOTOGRAPHER) }
+    var goc by remember(file) { mutableStateOf<GocMayNhan?>(null) }
+    var kieuTren by remember(file) { mutableStateOf<KieuChupTren?>(null) }
+
+    LaunchedEffect(file) {
+        anh = withContext(Dispatchers.IO) { UprightBitmap.decode(file, shortSide = 720)?.asImageBitmap() }
+        val k = withContext(Dispatchers.Default) { phanTichAnhMau(context, file) }
+        // Kiểu chụp ĐOÁN sẵn theo khung hình — ảnh chân dung gần như luôn là selfie —
+        // nhưng hiện rõ trên nút để đổi được. Góc máy thì KHÔNG đoán (FOOTGUNS 88).
+        kieu = when (k.framing) {
+            FramingClass.CHEST, FramingClass.HEAD -> TemplateKind.SELFIE
+            else -> TemplateKind.PHOTOGRAPHER
+        }
+        kq = k
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onHuy,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Ds.surface,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Ds.pageH)
+                .padding(bottom = 24.dp),
+        ) {
+            Text("Thêm ảnh mẫu", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ds.text)
+            Spacer(Modifier.height(12.dp))
+
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(340.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Ds.surfaceMuted),
+                contentAlignment = Alignment.Center,
+            ) {
+                anh?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+                    ?: CircularProgressIndicator(strokeWidth = 2.dp)
+            }
+            Spacer(Modifier.height(14.dp))
+
+            val k = kq
+            when {
+                k == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Đang phân tích ảnh…", fontSize = 13.sp, color = Ds.textMuted)
+                }
+
+                k.verdict is TemplateVerdict.Rejected -> {
+                    Text("Ảnh này chưa dùng được", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Ds.dangerText)
+                    Spacer(Modifier.height(4.dp))
+                    Text(k.verdict.reason, fontSize = 13.sp, color = Ds.text)
+                    Text(k.verdict.hint, fontSize = 13.sp, color = Ds.textMuted)
+                    Spacer(Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedButton(onClick = onHuy, modifier = Modifier.weight(1f)) { Text("Huỷ") }
+                        Button(onClick = onChonAnhKhac, modifier = Modifier.weight(1f)) { Text("Chọn ảnh khác") }
+                    }
+                }
+
+                else -> {
+                    ChonNhan(kieu, { kieu = it }, goc, { goc = it })
+                    // Câu thứ ba CHỈ cho ảnh người khác chụp từ trên cao — xem `KieuChupTren`.
+                    val hoiKieuTren = kieu == TemplateKind.PHOTOGRAPHER && goc == GocMayNhan.TREN
+                    if (hoiKieuTren) ChonKieuTren(kieuTren) { kieuTren = it }
+                    Spacer(Modifier.height(18.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedButton(onClick = onHuy, modifier = Modifier.weight(1f)) { Text("Huỷ") }
+                        Button(
+                            onClick = {
+                                val chot = MediaLibrary.ganNhan(
+                                    file, kieu, goc, if (hoiKieuTren) kieuTren else null,
+                                )
+                                onLuu(chot, k)
+                            },
+                            enabled = goc != null && (!hoiKieuTren || kieuTren != null),
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Lưu ảnh mẫu") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * HAI NHÃN CHO ẢNH TỰ NHẬP: chụp kiểu gì, và máy đặt ở đâu.
+ *
+ * Ảnh cài sẵn mang hai thông tin này trong tên file. Thiếu kiểu chụp là mở sai
+ * camera, thiếu góc máy là ảnh selfie mất hai mục hướng dẫn. Xem `MediaLibrary.ganNhan`.
+ *
+ * Câu hỏi góc máy hiện với MỌI ảnh: suy góc máy từ khung xương lẫn dáng đứng và
+ * loại ống kính nên không tin được, kể cả ảnh toàn thân (FOOTGUNS 91).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChonNhan(
+    kieu: TemplateKind,
+    onKieu: (TemplateKind) -> Unit,
+    goc: GocMayNhan?,
+    onGoc: (GocMayNhan) -> Unit,
+) {
+    Text("Ảnh này chụp kiểu gì?", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Ds.text)
+    Spacer(Modifier.height(6.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(
+            TemplateKind.PHOTOGRAPHER to "Người khác chụp",
+            TemplateKind.SELFIE to "Selfie",
+            TemplateKind.MIRROR to "Qua gương",
+        ).forEach { (k, ten) ->
+            FilterChip(selected = kieu == k, onClick = { onKieu(k) }, label = { Text(ten, fontSize = 13.sp) })
+        }
+    }
+
+    run {
+        Spacer(Modifier.height(14.dp))
+        Text("Máy đặt ở đâu khi chụp?", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Ds.text)
+        Text(
+            "App không tự đoán chính xác được góc máy từ ảnh, nên cần bạn chọn để " +
+                "hướng dẫn đúng việc nâng/hạ và chúc/hất máy. Nhìn ảnh theo gợi ý dưới mỗi mục.",
+            fontSize = 12.sp, color = Ds.textMuted,
+        )
+        Spacer(Modifier.height(6.dp))
+        // KHUNG QUY CHUẨN nhận biết góc máy bằng mắt — xem DIEM_YEU_GOC_MAY_SELFIE.md.
+        // Người dùng chọn, app không đoán: đoán bằng mặt/cổ/vai chỉ trúng 59%.
+        listOf(
+            Triple(GocMayNhan.TREN, "Trên cao, chúc xuống", "Thấy đỉnh đầu hoặc sàn nhà · cằm che gần hết cổ · mắt ngước lên nhìn máy"),
+            Triple(GocMayNhan.NGANG, "Ngang tầm mắt", "Nền là tường · mặt, cổ, vai cân đối · mắt nhìn thẳng"),
+            Triple(GocMayNhan.DUOI, "Dưới thấp, hất lên", "Thấy trần nhà hoặc bầu trời · thấy dưới cằm · mắt liếc xuống nhìn máy"),
+        ).forEach { (g, ten, goiY) ->
+            DongChon(goc == g, ten, goiY) { onGoc(g) }
+        }
+        if (goc == null) {
+            Text(
+                "Chọn góc máy để lưu",
+                fontSize = 12.sp, color = Ds.warning,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+/**
+ * CÂU THỨ BA — kiểu chụp từ trên cao. Chỉ hiện với ảnh người khác chụp, góc trên cao.
+ * Xem `KieuChupTren`.
+ */
+@Composable
+private fun ChonKieuTren(chon: KieuChupTren?, onChon: (KieuChupTren) -> Unit) {
+    Spacer(Modifier.height(14.dp))
+    Text("Chụp từ trên cao kiểu nào?", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Ds.text)
+    Text(
+        "Cùng chúc máy xuống nhưng đứng gần, dùng góc rộng hay đứng xa rồi zoom cho ra " +
+            "ảnh khác hẳn. Nhìn độ to của đầu so với chân.",
+        fontSize = 12.sp, color = Ds.textMuted,
+    )
+    Spacer(Modifier.height(6.dp))
+    KieuChupTren.entries.forEach { k -> DongChon(chon == k, k.nhan, k.goiY) { onChon(k) } }
+    if (chon == null) {
+        Text(
+            "Chọn kiểu chụp để lưu",
+            fontSize = 12.sp, color = Ds.warning,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+/** Một dòng chọn có nút tròn, tên và gợi ý nhận biết. */
+@Composable
+private fun DongChon(chon: Boolean, ten: String, goiY: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (chon) Ds.primary.copy(alpha = 0.10f) else Ds.surfaceMuted)
+            .selectable(selected = chon, role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = chon, onClick = null)
+        Spacer(Modifier.width(8.dp))
+        Column {
+            Text(ten, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Ds.text)
+            Text(goiY, fontSize = 12.sp, color = Ds.textMuted)
+        }
+    }
+}
