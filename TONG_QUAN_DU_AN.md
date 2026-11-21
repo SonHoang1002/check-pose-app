@@ -197,7 +197,7 @@ bao giờ tắt được**.
 | 3 | Phụ thuộc giả định "mẫu cao 1m70" | Đo theo đơn vị tương đối *(v3 sửa tiếp — xem dưới)* |
 | 4 | `acos` khuếch đại nhiễu gần chính diện | Lọc **r** trước khi acos + **vùng chết** `r/rFront ≥ 0.93` |
 | 5 | Không có debounce thời gian | Vi phạm phải kéo dài **0.45s**; đạt phải giữ **0.20s** |
-| 6 | Không giới hạn thời gian hiển thị / không làm tròn | Cue sống tối thiểu **1.2s**; làm tròn bội **5°/5cm**; số đổi **1 lần/giây** |
+| 6 | Không giới hạn thời gian hiển thị / không làm tròn | Cue sống tối thiểu **2.0s** (nâng từ 1.2s, FOOTGUNS 66); làm tròn bội **5°/5cm**; số đổi **1 lần/giây** |
 | 7 | Không có sàn hành động | Mỗi mục có `actionFloor`: dưới mức đó thì **im và tính là đạt** |
 | **8** | **Đo nhầm đại lượng** — live tự chọn "mốc tốt nhất còn đo được" trong khi mẫu dùng mốc khác | **FramingClass** — mốc suy 1 lần từ mẫu, áp nguyên xi |
 
@@ -248,7 +248,7 @@ Ba cột theo quy ước: **accept** (im lặng, tính là đạt) · **enter** 
 |---|---|---|
 | `cueEnterHoldSeconds` | 0,45s | vi phạm phải kéo dài ngần này mới hiện cue |
 | `cueExitHoldSeconds` | 0,20s | đạt phải giữ ngần này mới tắt cue |
-| `cueMinDisplaySeconds` | 1,20s | cue đã hiện phải ở lại ngần này |
+| `cueMinDisplaySeconds` | 2,00s | cue đã hiện phải ở lại ngần này |
 | `cueNumberRefreshSeconds` | 1,00s | con số trong cue chỉ đổi mỗi giây một lần |
 | `dwellSeconds` | 0,80s | đủ 6 mục → giữ ổn định ngần này |
 | `countdownSeconds` | 3,00s | đếm ngược; **ghi bắt đầu ngay từ lúc bắt đầu đếm** |
@@ -348,8 +348,8 @@ bị mở khoá và nhắc lại. Không có cơ chế này thì app đứng im 
 
 | Tình huống | Xử lý |
 |---|---|
-| Kẹt ở một mục quá 20 giây (tường chắn, trần thấp) | Nới dung sai + hiện *"Góc này cũng ổn, chụp thử nhé?"* + cho phép chụp. Ghi log để biết template nào hay kẹt |
-| Không thấy người quá 1,5 giây | Hiện *"Đưa mẫu vào khung"*, không đơ màn hình |
+| ⚠️ *Chưa có trong code (rà soát 21/11/2026)* — Kẹt ở một mục quá 20 giây (tường chắn, trần thấp) | Nới dung sai + hiện *"Góc này cũng ổn, chụp thử nhé?"* + cho phép chụp. Ghi log để biết template nào hay kẹt |
+| ⚠️ *Chưa có trong code (rà soát 21/11/2026)* — Không thấy người quá 1,5 giây | Hiện *"Đưa mẫu vào khung"*, không đơ màn hình |
 | Mẫu cao/thấp khác người trong ảnh mẫu | GIỮ nguyên độ cao máy, cho góc ngửa/chúc xê dịch trong 5°, phần lệch còn lại để khâu cắt ảnh xử lý |
 | **Nút chụp thủ công** | **Luôn hiện, mọi lúc.** Không bao giờ giam người dùng trong vòng hướng dẫn |
 

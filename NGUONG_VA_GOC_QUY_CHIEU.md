@@ -17,7 +17,7 @@ Bảy nguyên nhân, xếp theo mức đóng góp thực tế:
 | 3 | **Mục 3 phụ thuộc giả định "mẫu cao 1m70"** | Mẫu cao 1m55 → khoảng cách ước sai ~10% → độ cao máy sai ~10–15cm → **vi phạm vĩnh viễn**, người chụp làm gì cũng không tắt được cue | Đo theo **đơn vị chiều cao mẫu**: `rel = −f·tan(elev)/h_px`. Chiều cao thật bị triệt tiêu khỏi công thức |
 | 4 | **`yaw = acos(r/rFront)` khuếch đại nhiễu gần chính diện** | Ở yaw ≈ 0, đạo hàm acos → ∞: r nhiễu 2% thành yaw nhiễu 12° | Lọc **r** trước khi acos (v1 lọc sau) + **vùng chết chính diện** `r/rFront ≥ 0.93 ⇒ yaw = 0` |
 | 5 | **Không có debounce thời gian** | Một frame vượt ngưỡng là cue bật ngay, frame sau tắt | Vi phạm phải kéo dài **0.45s** mới hiện cue; đạt phải giữ **0.20s** mới tắt |
-| 6 | **Không giới hạn thời gian hiển thị / không làm tròn số** | "Xoay 7 độ" → "Xoay 9 độ" → "Xoay 6 độ" trong 1 giây, user tưởng app loạn | Cue sống tối thiểu **1.2s**; số làm tròn bội **5°/5cm**; số chỉ cập nhật **1 lần/giây** |
+| 6 | **Không giới hạn thời gian hiển thị / không làm tròn số** | "Xoay 7 độ" → "Xoay 9 độ" → "Xoay 6 độ" trong 1 giây, user tưởng app loạn | Cue sống tối thiểu **2.0s** (nâng từ 1.2s, FOOTGUNS 66); số làm tròn bội **5°/5cm**; số chỉ cập nhật **1 lần/giây** |
 | 7 | **Không có sàn hành động** | Báo "đưa máy sang phải" khi chỉ lệch 1.5% khung — người thật không làm nổi | Mỗi mục có `actionFloor`: dưới mức đó thì **im và tính là đạt** |
 
 Thêm một lỗi tiềm ẩn cần kiểm ngay trên máy: v1 truyền `orientation: .up` cho
