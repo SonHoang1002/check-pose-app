@@ -282,8 +282,12 @@ fun CaptureScreen(
     // Cài đặt gom sau nút ⚙ — các mục không cần thấy khi đang canh khung.
     var showSettings by rememberSaveable { mutableStateOf(false) }
 
-    DisposableEffect(hasPermission) {
-        if (!hasPermission) return@DisposableEffect onDispose { }
+    // Camera CHỈ bật khi thật sự cần: có quyền, ảnh mẫu đã phân tích xong và không lỗi.
+    // Đang phân tích ảnh mẫu thì màn chỉ hiện chữ chờ — bật camera lúc đó là lãng phí
+    // pin và đèn camera sáng vô ích.
+    val cameraCanBat = hasPermission && !state.analyzingTemplate && state.templateError == null
+    DisposableEffect(cameraCanBat) {
+        if (!cameraCanBat) return@DisposableEffect onDispose { }
 
         // NHAN DIEN KHUON MAT THOI GIAN THUC.
         //

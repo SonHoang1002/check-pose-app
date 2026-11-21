@@ -92,6 +92,16 @@ class CaptureController(
     private var imageAnalysis: ImageAnalysis? = null
     private var videoCapture: VideoCapture<Recorder>? = null
     private var cameraProvider: ProcessCameraProvider? = null
+
+    /**
+     * Đã gọi [stop] — không được gắn camera nữa.
+     *
+     * ⚠️ Vì sao cần: [start] lấy provider BẤT ĐỒNG BỘ. Nếu người dùng rời màn chụp
+     * trước khi provider sẵn sàng, [stop] chạy lúc `cameraProvider` còn null nên không
+     * có gì để unbind; rồi listener vẫn chạy và BẬT camera, không ai tắt — đèn camera
+     * sáng khi đã sang màn khác.
+     */
+    private var stopped = false
     private var recording: Recording? = null
 
     /**
@@ -385,6 +395,7 @@ class CaptureController(
     }
 
     fun start(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
+        stopped = false
         val executor = Executors.newSingleThreadExecutor()
         analysisExecutor = executor
         boundLifecycleOwner = lifecycleOwner
@@ -395,6 +406,8 @@ class CaptureController(
         providerFuture.addListener({
             try {
                 val provider = providerFuture.get()
+                // Đã rời màn trong lúc chờ provider: đừng bật camera lại.
+                if (stopped) return@addListener
                 cameraProvider = provider
                 bindAll(provider, lifecycleOwner, previewView, executor)
                 onReady(liveDetectionActive)
@@ -640,6 +653,7 @@ class CaptureController(
      * lỗi nào, app chỉ tắt ngóm. Đã gặp thật khi xoay máy (FOOTGUNS mục 11).
      */
     fun stop() {
+        stopped = true
         orientationListener.disable()
         recording?.stop()
         recording = null
