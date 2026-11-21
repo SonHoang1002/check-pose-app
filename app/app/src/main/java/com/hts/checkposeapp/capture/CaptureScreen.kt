@@ -279,6 +279,8 @@ fun CaptureScreen(
     // Tỉ lệ khung và lưới: lựa chọn của người dùng, giữ qua lần xoay màn hình.
     var tiLeKhung by rememberSaveable { mutableStateOf(TiLeKhung.BA_BON) }
     var hienLuoi by rememberSaveable { mutableStateOf(false) }
+    // Cài đặt gom sau nút ⚙ — các mục không cần thấy khi đang canh khung.
+    var showSettings by rememberSaveable { mutableStateOf(false) }
 
     DisposableEffect(hasPermission) {
         if (!hasPermission) return@DisposableEffect onDispose { }
@@ -517,6 +519,29 @@ fun CaptureScreen(
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
+        if (showSettings) {
+            CaptureSettingsSheet(
+                autoMode = state.autoMode,
+                onAutoMode = { vm.onAutoModeChanged(it) },
+                burst = state.burstMode,
+                onBurst = { burst ->
+                    controller?.setMode(
+                        if (burst) CaptureController.Mode.BURST else CaptureController.Mode.VIDEO
+                    )
+                    vm.onModeChanged(burst)
+                },
+                tiLeNhan = tiLeKhung.nhan,
+                onTiLeTiep = { tiLeKhung = tiLeKhung.tiep() },
+                khoaKhiDangQuay = state.recording || state.burstTaken > 0,
+                showGrid = hienLuoi,
+                onGrid = { hienLuoi = it },
+                showSkeleton = showSkeleton,
+                onSkeleton = { showSkeleton = it },
+                showDebug = showDebug,
+                onDebug = { showDebug = it },
+                onDismiss = { showSettings = false },
+            )
+        }
         if (hasPermission) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val tiLe = tiLeKhung.tiLe(
@@ -558,7 +583,6 @@ fun CaptureScreen(
                         Modifier
                             .clip(RoundedCornerShape(Ds.rPill))
                             .background(Ds.overlayScrim)
-                            .clickable { showDebug = !showDebug }
                             .padding(horizontal = 10.dp, vertical = 5.dp),
                     ) {
                         Text(
@@ -572,16 +596,6 @@ fun CaptureScreen(
                     CriteriaProgress(state.criteria, state.matchPercent, Modifier.width(150.dp))
                     Spacer(Modifier.height(6.dp))
                     CriteriaChecklist(state.criteria)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        if (showSkeleton) "Ẩn khung xương" else "Hiện khung xương",
-                        Modifier
-                            .clip(RoundedCornerShape(Ds.rPill))
-                            .background(Ds.overlayScrim)
-                            .clickable { showSkeleton = !showSkeleton }
-                            .padding(horizontal = 10.dp, vertical = 5.dp),
-                        color = Color(0xE6FFFFFF), fontSize = 11.sp,
-                    )
                 }
                     if (showDebug) {
                         Spacer(Modifier.height(8.dp))
@@ -601,14 +615,16 @@ fun CaptureScreen(
                         Text("Đổi mẫu", color = Color.White, fontSize = 11.sp)
                     }
                     Spacer(Modifier.height(8.dp))
-                    // Đổi tỉ lệ giữa lúc quay thì ảnh ra lẫn hai khung — khoá lại.
-                    val doiDuocKhung = !state.recording && state.burstTaken == 0
-                    NutNho(
-                        "Khung " + tiLeKhung.nhan,
-                        enabled = doiDuocKhung,
-                    ) { tiLeKhung = tiLeKhung.tiep() }
-                    Spacer(Modifier.height(6.dp))
-                    NutNho(if (hienLuoi) "Lưới ✓" else "Lưới", enabled = true) { hienLuoi = !hienLuoi }
+                    // Nút cài đặt kiểu iPhone: mọi tuỳ chọn phụ nằm trong bảng này.
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(Ds.rPill))
+                            .background(Ds.overlayScrim)
+                            .clickable { showSettings = true }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Text("⚙ Cài đặt", color = Color.White, fontSize = 11.sp)
+                    }
                 }
             }
 
@@ -649,7 +665,7 @@ fun CaptureScreen(
                     Spacer(Modifier.height(12.dp))
                 }
                 // ⚠️ TẠM — hai dòng số đo, xem `CaptureUiState.debugGocMay` và `debugDo`.
-                state.debugGocMay?.let { g ->
+                if (showDebug) state.debugGocMay?.let { g ->
                     Text(
                         g,
                         color = Color.White, fontSize = 13.sp,
@@ -662,7 +678,7 @@ fun CaptureScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                 }
-                state.debugDo?.let { d ->
+                if (showDebug) state.debugDo?.let { d ->
                     Text(
                         d,
                         color = Color(0xCCFFFFFF), fontSize = 10.sp,
@@ -698,31 +714,7 @@ fun CaptureScreen(
                         hasCriteria = state.criteria.isNotEmpty(),
                         onClickWarning = { controller?.resetZoom() },
                     )
-                    Text(
-                        if (state.autoMode) {
-                            "Tự động sẽ bỏ qua mục bị kẹt sau khoảng 6 giây."
-                        } else {
-                            "Bạn có thể bấm chụp bất cứ lúc nào."
-                        },
-                        color = Color(0xCCFFFFFF),
-                        fontSize = 11.sp,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
                     Spacer(Modifier.height(10.dp))
-                    // Cong tac hai che do. An di trong luc dang quay/dang chup de
-                    // nguoi dung khong doi che do giua chung.
-                    if (!state.recording && state.burstTaken == 0) {
-                        AutoSwitch(state.autoMode) { vm.onAutoModeChanged(it) }
-                        Spacer(Modifier.height(8.dp))
-                        ModeSwitch(state.burstMode) { burst ->
-                            controller?.setMode(
-                                if (burst) CaptureController.Mode.BURST
-                                else CaptureController.Mode.VIDEO
-                            )
-                            vm.onModeChanged(burst)
-                        }
-                        Spacer(Modifier.height(10.dp))
-                    }
                     CameraControls(
                         state = state,
                         enabled = vm.readyToRecord,
@@ -1216,52 +1208,6 @@ private fun ThuocZoom(
 
 
 /**
- * BẬT/TẮT TỰ ĐỘNG.
- *
- * Bật thì khi đã đủ giống ảnh mẫu, app tự đếm ngược rồi bấm quay hộ — người dùng
- * rảnh hai tay để tạo dáng. Tắt thì họ tự bấm như thường.
- *
- * ⚠️ Đây KHÔNG phải khoá nút chụp. Nút bấm tay vẫn luôn dùng được ở cả hai chế độ —
- * PO đã chốt không bao giờ chặn việc chụp.
- */
-@Composable
-private fun AutoSwitch(auto: Boolean, onChange: (Boolean) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ModeChip("Tự bấm", !auto) { onChange(false) }
-        ModeChip("Tự động đếm 5s", auto) { onChange(true) }
-    }
-}
-
-@Composable
-private fun ModeSwitch(burst: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(Ds.rPill))
-            .background(Ds.overlayScrim)
-            .padding(3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ModeChip("Quay video", selected = !burst) { onChange(false) }
-        ModeChip("Chup lien tuc", selected = burst) { onChange(true) }
-    }
-}
-
-@Composable
-private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        label,
-        Modifier
-            .clip(RoundedCornerShape(Ds.rPill))
-            .background(if (selected) Color.White else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-        color = if (selected) Ds.text else Color(0xCCFFFFFF),
-        fontSize = 12.sp,
-        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-    )
-}
-
-/**
  * LƯỚI 3×3 — chỉ giúp MẮT người cầm máy canh bố cục như app camera thường.
  *
  * Không tham gia chấm: app đo vị trí người bằng toạ độ liên tục, mịn hơn ô lưới.
@@ -1280,20 +1226,6 @@ private fun LuoiBaPhan() {
             }
         }
     )
-}
-
-/** Nút viên nhỏ trên nền mờ, cùng kiểu nút "Đổi mẫu". */
-@Composable
-private fun NutNho(nhan: String, enabled: Boolean, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(Ds.rPill))
-            .background(Ds.overlayScrim)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    ) {
-        Text(nhan, color = if (enabled) Color.White else Color(0x80FFFFFF), fontSize = 11.sp)
-    }
 }
 
 @Composable
