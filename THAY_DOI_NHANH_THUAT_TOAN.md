@@ -6,6 +6,15 @@
 
 ---
 
+## 0. Cập nhật 21/11/2026 — đổi package, bỏ quay video, cài đặt và ánh sáng
+
+- **Package:** `com.hts.checkposeapp` (namespace, applicationId, đường dẫn source và lệnh `adb`).
+- **Bỏ quay video:** chỉ còn chụp liên tiếp 8 tấm. Bấm lại khi đang chụp để dừng sớm; bấm đúp không khởi động hai loạt. Camera chỉ gắn 3 chức năng (xem trước, nhận diện, chụp).
+- **Camera chỉ bật khi cần:** không bật lúc đang phân tích ảnh mẫu; sửa lỗi camera bật lại sau khi đã rời màn chụp (xem `FOOTGUNS.md` 102–103).
+- **Nút ⚙ Cài đặt:** gom chế độ bấm, tỉ lệ khung, lưới, khung xương, số đo gỡ lỗi. Màn chụp còn lại các nút chính.
+- **Thanh chỉnh độ sáng (EV)** trên màn chụp.
+- **Phân tích ánh sáng** từng ảnh ở màn kết quả (chỉ hiển thị, không tính điểm).
+
 ## 1. Góc máy (máy cao/thấp, máy ngửa/chúc) — thay đổi lớn nhất
 
 ### Cách làm hiện tại

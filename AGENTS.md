@@ -5,6 +5,13 @@
 > **Mâu thuẫn giữa các lớp: lớp dưới thắng lớp trên.**
 >
 > `AGENTS.md` ở gốc dự án là bản sao y hệt file này (dành cho Codex).
+>
+> **Cập nhật 21/11/2026 — trạng thái hiện tại:**
+> - Package và applicationId đã đổi thành `com.hts.checkposeapp` (lệnh `adb` cũng đổi theo).
+> - **Đã bỏ chế độ quay video.** Màn chụp chỉ còn chụp liên tiếp 8 tấm ảnh thật; bấm lại khi đang chụp để dừng sớm. Camera chỉ bật sau khi phân tích xong ảnh mẫu.
+> - Thanh chỉnh độ sáng (bù sáng EV) trên màn chụp. Nút ⚙ Cài đặt (kiểu iPhone) gom: chế độ bấm, tỉ lệ khung, lưới, khung xương, số đo gỡ lỗi.
+> - Màn kết quả có mục phân tích ánh sáng từng ảnh (chỉ hiển thị, không tính vào điểm).
+> - Các đoạn nói về "quay video" phía dưới là lịch sử thiết kế; luồng hiện tại theo mục này.
 
 ---
 
@@ -339,7 +346,7 @@ chương 2 của `TONG_QUAN_DU_AN.md`**, vì chúng sửa lẫn nhau. Đọc sai
 chụp lại được đúng góc chụp và bố cục của một ảnh mẫu.
 
 - **Người mẫu** chỉ cần làm đúng một việc: **quay đúng hướng**. Không cần biết tạo dáng.
-- App **quay video 15-30 giây** thay vì chụp một tấm, rồi tự chọn ra 3-5 khung đẹp nhất.
+- App **chụp liên tiếp 8 tấm ảnh thật** quanh lúc bấm (bấm lại để dừng sớm), rồi tự chọn ra 5 tấm đẹp nhất. *(Bản đầu dùng quay video 15-30s; đã bỏ 21/11/2026.)*
 - **Dáng tay chân là tiêu chí cuối cùng và nhẹ nhất** (0,10 trên thang 1,00), không bao giờ
   chặn việc chụp.
 
@@ -419,8 +426,11 @@ bắt buộc có ngưỡng đo trên máy thật. Bước 4 là việc duy nhấ
 | `log/` | `SessionLogger.kt` | **Ghi mọi số đo ra CSV** |
 | `home/` | `HomeScreen.kt` | Lưới chọn ảnh mẫu + hộp thoại cổng kiểm |
 | | `VideoPickerScreen.kt` | Chọn video đóng vai camera — **CHỈ có ở bản chạy thử**, gỡ khi dùng camera thật |
-| `camera/` | `CaptureController.kt` | **CameraX cho màn chụp thật** — xem trước + nhận diện + QUAY VIDEO |
-| `capture/` | `CaptureScreen.kt` + UiState/ViewModel | **MÀN CHỤP THẬT** — camera thật, quay 15-30s, chấm điểm sau khi quay |
+| `camera/` | `CaptureController.kt` | **CameraX cho màn chụp thật** — xem trước + nhận diện + chụp liên tiếp (đã bỏ quay video) |
+| `capture/` | `CaptureScreen.kt` + UiState/ViewModel | **MÀN CHỤP THẬT** — camera thật, chụp liên tiếp 8 tấm, chấm điểm sau khi chụp |
+| | `CaptureSettingsSheet.kt` | Nút ⚙ Cài đặt (bottom sheet): chế độ bấm, tỉ lệ khung, lưới, khung xương, số đo gỡ lỗi |
+| | `BrightnessSlider.kt` | Thanh chỉnh độ sáng (bù sáng EV) trên màn chụp |
+| `light/` | `LightAnalysis.kt` · `LightAnalysisCard.kt` | Phân tích ánh sáng từng ảnh ở màn kết quả — chỉ hiển thị, không tính vào điểm |
 | `measure/` | `PoseMeasurement.kt` | **TẦNG ĐO ĐẠC — "một hàm duy nhất"** (Bước 3). Ảnh mẫu và khung camera đi qua đúng hàm này |
 | | `ShotScore.kt` | Chấm điểm giống ảnh mẫu + **chia lại trọng số** khi có mục không đo được |
 | | `BestShotBuffer.kt` | Giữ tối đa 12 khung tốt nhất, ép cách nhau về thời gian. **Logic thuần, có 9 bài kiểm thử** |
@@ -460,8 +470,8 @@ Mỗi lớp hụt ở một tình huống khác nhau, nên phải có đủ cả
 | Chọn xong 1 tấm → **xoá cả thư mục phiên** | 4 tấm không chọn |
 | `sweepOrphans()` + `sweepRecordings()` lúc **mở app** | App bị hệ điều hành giết, ba lớp trên không kịp chạy |
 
-**Video thô là rác nặng nhất** — 30 giây Full HD khoảng 60-100 MB. Nó bị xoá **ngay sau khi
-cắt xong 5 ảnh**, và `sweepRecordings()` vớt nốt nếu app bị giết giữa chừng.
+**Từ 21/11/2026 không còn quay video**, nên không sinh video thô. Ảnh gốc của loạt chụp bị xoá
+ngay sau khi chấm xong; `sweepRecordings()` chỉ còn dọn rác của bản cũ nếu app bị giết giữa chừng.
 
 Ảnh giữ lại nằm ở `files/ket-qua/`. Rút về máy tính:
 `adb pull /sdcard/Android/data/com.hts.checkposeapp/files/ket-qua/`
@@ -550,7 +560,7 @@ Tham chiếu quy trình chung + lệnh chạy demo lên máy:
 ### Tính năng lõi (ưu tiên số 1)
 
 ```
-chọn template HOẶC import ảnh → quy ra số → hướng dẫn realtime → khi đủ gần thì QUAY 15-30s
+chọn template HOẶC import ảnh → quy ra số → hướng dẫn realtime → khi đủ gần thì CHỤP 8 tấm liên tiếp
                                                                 → AI chọn 3-5 khung đẹp nhất
 ```
 
